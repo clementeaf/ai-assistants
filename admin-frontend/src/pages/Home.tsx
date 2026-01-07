@@ -1,7 +1,9 @@
+import Chat from '../components/Chat/Chat';
+
 function Home() {
   return (
     <div>
-      <h1 className="text-2xl font-bold">Home</h1>
+      <Chat />
     </div>
   );
 }
