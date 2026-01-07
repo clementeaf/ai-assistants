@@ -1,0 +1,3 @@
+Orden ORDER-200: estado=shipped, total=120.0 USD, creada=2025-02-10T16:30:00+00:00.
+Tracking TRACK-9002 (DemoCarrier): estado=in_transit, última actualización=2025-02-12T09:00:00+00:00, ETA=2025-02-14T18:00:00+00:00.
+

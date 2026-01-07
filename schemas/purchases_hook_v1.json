@@ -1,0 +1,196 @@
+{
+  "name": "purchases_hook",
+  "version": "v1",
+  "request_schema": {
+    "$defs": {
+      "HookAction": {
+        "description": "Supported actions for the purchases hook API.",
+        "enum": [
+          "get_order",
+          "list_orders",
+          "get_shipment_by_order_id",
+          "get_shipment_by_tracking_id"
+        ],
+        "title": "HookAction",
+        "type": "string"
+      }
+    },
+    "description": "Request envelope sent to an external purchases hook.",
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/HookAction"
+      },
+      "payload": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "title": "Payload",
+        "type": "object"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "title": "HookRequest",
+    "type": "object"
+  },
+  "response_schema": {
+    "$defs": {
+      "HookOrder": {
+        "description": "Order payload returned by the external hook.",
+        "properties": {
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/OrderStatus"
+          },
+          "total_amount": {
+            "title": "Total Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "created_at_iso": {
+            "title": "Created At Iso",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "customer_id",
+          "status",
+          "total_amount",
+          "currency",
+          "created_at_iso"
+        ],
+        "title": "HookOrder",
+        "type": "object"
+      },
+      "HookShipment": {
+        "description": "Shipment payload returned by the external hook.",
+        "properties": {
+          "tracking_id": {
+            "title": "Tracking Id",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "carrier": {
+            "title": "Carrier",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/ShipmentStatus"
+          },
+          "last_update_at_iso": {
+            "title": "Last Update At Iso",
+            "type": "string"
+          },
+          "estimated_delivery_at_iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Delivery At Iso"
+          }
+        },
+        "required": [
+          "tracking_id",
+          "order_id",
+          "carrier",
+          "status",
+          "last_update_at_iso",
+          "estimated_delivery_at_iso"
+        ],
+        "title": "HookShipment",
+        "type": "object"
+      },
+      "OrderStatus": {
+        "description": "Supported order statuses.",
+        "enum": [
+          "processing",
+          "shipped",
+          "delivered",
+          "cancelled"
+        ],
+        "title": "OrderStatus",
+        "type": "string"
+      },
+      "ShipmentStatus": {
+        "description": "Supported shipment/tracking statuses.",
+        "enum": [
+          "label_created",
+          "in_transit",
+          "out_for_delivery",
+          "delivered",
+          "exception"
+        ],
+        "title": "ShipmentStatus",
+        "type": "string"
+      }
+    },
+    "description": "Response envelope returned by the external purchases hook.",
+    "properties": {
+      "ok": {
+        "title": "Ok",
+        "type": "boolean"
+      },
+      "order": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/HookOrder"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "orders": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/HookOrder"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Orders"
+      },
+      "shipment": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/HookShipment"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "title": "HookResponse",
+    "type": "object"
+  }
+}
