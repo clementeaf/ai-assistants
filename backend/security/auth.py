@@ -15,7 +15,7 @@ class AuthContext:
     api_key: str
 
 
-def _parse_api_keys(raw: str) -> dict[str, str]:
+def parse_api_keys(raw: str) -> dict[str, str]:
     """Parse API keys mapping from env.
 
     Format: "projectA:keyA,projectB:keyB"
@@ -33,7 +33,7 @@ def _parse_api_keys(raw: str) -> dict[str, str]:
     return mapping
 
 
-def _is_auth_enabled() -> bool:
+def is_auth_enabled() -> bool:
     """Return true if auth is enabled by environment configuration."""
     raw = os.getenv("AI_ASSISTANTS_API_KEYS")
     return raw is not None and raw.strip() != ""
@@ -44,7 +44,7 @@ def require_auth(x_api_key: str | None = Header(default=None)) -> AuthContext:
 
     If AI_ASSISTANTS_API_KEYS is not set, authentication is disabled (dev mode).
     """
-    if not _is_auth_enabled():
+    if not is_auth_enabled():
         bind_contextvars(project_id="dev")
         return AuthContext(project_id="dev", api_key="dev")
 
@@ -52,7 +52,7 @@ def require_auth(x_api_key: str | None = Header(default=None)) -> AuthContext:
         raise HTTPException(status_code=401, detail="Missing X-API-Key")
 
     raw = os.getenv("AI_ASSISTANTS_API_KEYS", "")
-    mapping = _parse_api_keys(raw)
+    mapping = parse_api_keys(raw)
     for project_id, expected_key in mapping.items():
         if x_api_key == expected_key:
             bind_contextvars(project_id=project_id)

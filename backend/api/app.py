@@ -5,7 +5,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from structlog.contextvars import bind_contextvars, clear_contextvars, get_contextvars
 
 from ai_assistants.api.models import (
@@ -19,6 +19,7 @@ from ai_assistants.api.models import (
     WhatsAppGatewayInboundRequest,
     WhatsAppGatewayInboundResponse,
     WhatsAppInboundRequest,
+    WebSocketMessage,
 )
 from ai_assistants.channels.models import Channel, InboundMessage
 from ai_assistants.channels.webhook_security import load_webhook_security_config, verify_signature
@@ -27,7 +28,7 @@ from ai_assistants.orchestrator.runtime import Orchestrator
 from ai_assistants.persistence.sqlite_store import SqliteConversationStore, load_sqlite_store_config
 from ai_assistants.persistence.sqlite_job_store import SqliteJobStore, load_sqlite_job_store_config
 from ai_assistants.persistence.sqlite_memory_store import SqliteCustomerMemoryStore, load_sqlite_memory_store_config
-from ai_assistants.security.auth import AuthContext, require_auth
+from ai_assistants.security.auth import AuthContext, require_auth, parse_api_keys, is_auth_enabled
 from ai_assistants.security.rate_limit import InMemoryRateLimiter, load_rate_limit_config
 from ai_assistants.jobs.callbacks import JobCallbackSender, load_job_callback_config
 
@@ -174,6 +175,143 @@ def create_app() -> FastAPI:
 
     v1 = APIRouter(prefix="/v1")
     legacy = APIRouter()
+
+    async def _authenticate_websocket(api_key: str | None) -> AuthContext | None:
+        """Authenticate WebSocket connection using API key from query params."""
+        if not is_auth_enabled():
+            bind_contextvars(project_id="dev")
+            return AuthContext(project_id="dev", api_key="dev")
+
+        if api_key is None or api_key.strip() == "":
+            return None
+
+        raw = os.getenv("AI_ASSISTANTS_API_KEYS", "")
+        mapping = parse_api_keys(raw)
+        for project_id, expected_key in mapping.items():
+            if api_key == expected_key:
+                bind_contextvars(project_id=project_id)
+                return AuthContext(project_id=project_id, api_key=api_key)
+
+        return None
+
+    @v1.websocket("/ws/conversations/{conversation_id}")
+    async def websocket_chat(
+        websocket: WebSocket,
+        conversation_id: str,
+    ):
+        """WebSocket endpoint for real-time chat with AI assistant."""
+        # Aceptar conexión primero (requerido por FastAPI)
+        await websocket.accept()
+        
+        # Obtener query params de la URL
+        query_params = dict(websocket.query_params)
+        api_key = query_params.get("api_key")
+        customer_id = query_params.get("customer_id")
+        
+        # Autenticar después de aceptar
+        auth = await _authenticate_websocket(api_key)
+        
+        if auth is None and is_auth_enabled():
+            error_msg = WebSocketMessage(
+                type="error",
+                conversation_id=conversation_id,
+                error="Authentication failed: Invalid or missing API key",
+            )
+            await websocket.send_json(error_msg.model_dump())
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+
+        try:
+            if auth is None:
+                auth = AuthContext(project_id="dev", api_key="dev")
+            _bind_auth_context(auth)
+
+            request_id = str(uuid.uuid4())
+            bind_contextvars(
+                request_id=request_id,
+                http_method="WS",
+                http_path=f"/v1/ws/conversations/{conversation_id}",
+            )
+
+            while True:
+                try:
+                    data = await websocket.receive_json()
+                    message = WebSocketMessage.model_validate(data)
+
+                    if message.type == "ping":
+                        await websocket.send_json(
+                            WebSocketMessage(type="pong", conversation_id=conversation_id).model_dump()
+                        )
+                        continue
+
+                    if message.type != "user_message" or message.text is None:
+                        await websocket.send_json(
+                            WebSocketMessage(
+                                type="error",
+                                conversation_id=conversation_id,
+                                error="Invalid message type or missing text",
+                            ).model_dump()
+                        )
+                        continue
+
+                    if rate_limiter is not None:
+                        try:
+                            rate_limiter.check(key=auth.project_id)
+                        except HTTPException:
+                            await websocket.send_json(
+                                WebSocketMessage(
+                                    type="error",
+                                    conversation_id=conversation_id,
+                                    error="Rate limit exceeded",
+                                ).model_dump()
+                            )
+                            continue
+
+                    result = orchestrator.run_turn(
+                        conversation_id=conversation_id,
+                        user_text=message.text,
+                        customer_id=customer_id,
+                    )
+
+                    from datetime import datetime
+
+                    response = WebSocketMessage(
+                        type="assistant_message",
+                        text=result.response_text,
+                        conversation_id=result.conversation_id,
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                    )
+
+                    await websocket.send_json(response.model_dump())
+
+                except WebSocketDisconnect:
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    from datetime import datetime
+
+                    error_msg = WebSocketMessage(
+                        type="error",
+                        conversation_id=conversation_id,
+                        error=str(exc),
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                    )
+                    await websocket.send_json(error_msg.model_dump())
+
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:  # noqa: BLE001
+            try:
+                error_msg = WebSocketMessage(
+                    type="error",
+                    conversation_id=conversation_id,
+                    error=f"Internal error: {str(exc)}",
+                )
+                await websocket.send_json(error_msg.model_dump())
+                await websocket.close(code=1011, reason=f"Internal error: {str(exc)}")
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            clear_contextvars()
 
     @v1.post("/conversations/{conversation_id}/messages", response_model=SendMessageResponse)
     def v1_send_message(

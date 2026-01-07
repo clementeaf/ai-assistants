@@ -80,3 +80,12 @@ class WhatsAppGatewayInboundResponse(BaseModel):
     response_text: str
 
 
+class WebSocketMessage(BaseModel):
+    """WebSocket message format for chat communication."""
+
+    type: str = Field(description="Message type: 'user_message', 'assistant_message', 'error', 'ping', 'pong'")
+    text: str | None = Field(default=None, description="Message text content")
+    conversation_id: str | None = Field(default=None, description="Conversation ID")
+    error: str | None = Field(default=None, description="Error message if type is 'error'")
+    timestamp: str | None = Field(default=None, description="ISO timestamp of the message")
+
