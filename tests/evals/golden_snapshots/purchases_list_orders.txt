@@ -1,5 +1,0 @@
-Estas son tus compras recientes:
-- ORDER-210: estado=delivered, total=15.0 USD, tracking=TRACK-9010
-- ORDER-200: estado=shipped, total=120.0 USD, tracking=TRACK-9002
-- ORDER-100: estado=delivered, total=39.99 USD, tracking=TRACK-9001
-

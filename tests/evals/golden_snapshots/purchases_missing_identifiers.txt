@@ -1,2 +1,0 @@
-Decime el ID de la orden (por ejemplo: ORDER-100) o el tracking (por ejemplo: TRACK-9002). También podés pedir 'mis compras'.
-

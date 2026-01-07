@@ -1,5 +1,0 @@
-Encontré estas compras del mes pasado. ¿A cuál te referís?
-Si me decís el monto aproximado (por ejemplo: 120) puedo identificarla.
-- ORDER-210: estado=delivered, total=15.0 USD, tracking=TRACK-9010
-- ORDER-200: estado=shipped, total=120.0 USD, tracking=TRACK-9002
-

@@ -1,2 +1,0 @@
-Tracking TRACK-9001 (DemoCarrier): estado=delivered, última actualización=2025-01-08T12:00:00+00:00, ETA=2025-01-08T18:00:00+00:00.
-
