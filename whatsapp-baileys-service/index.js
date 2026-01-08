@@ -16,6 +16,9 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+// Cargar variables de entorno desde .env
+require('dotenv').config();
+
 // Configuración
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const API_KEY = process.env.API_KEY || process.env.AI_ASSISTANTS_API_KEY || 'dev';
