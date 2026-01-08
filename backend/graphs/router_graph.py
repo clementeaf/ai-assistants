@@ -75,12 +75,24 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
         conversation = state["conversation"]
         user_text = state["user_text"]
         
-        # Detectar "menu" o "menú" antes de cualquier otra cosa
+        # 1. Detectar códigos de activación de flujo (FLOW_RESERVA_INIT, START_RESERVA, etc)
+        flow_name, flow_domain = _detect_flow_activation_code(user_text)
+        if flow_domain:
+            # Marcar en memoria que se activó por código
+            updated_memory = dict(conversation.customer_memory)
+            updated_memory["flow_activated_by_code"] = "true"
+            updated_memory["flow_activation_code"] = flow_name
+            updated_conversation = conversation.model_copy(
+                update={"routed_domain": flow_domain, "customer_memory": updated_memory}
+            )
+            return {**state, "domain": flow_domain, "conversation": updated_conversation}
+        
+        # 2. Detectar "menu" o "menú"
         text_lower = user_text.strip().lower()
         if text_lower == "menu" or text_lower == "menú":
             return {**state, "domain": "unknown"}
         
-        # Detectar si el usuario escribió un número después de ver el menú
+        # 3. Detectar si el usuario escribió un número después de ver el menú
         menu_flows_json = conversation.customer_memory.get("menu_flows")
         if menu_flows_json:
             try:
@@ -565,6 +577,23 @@ def bookings_node(state: GraphState) -> GraphState:
     conversation = state["conversation"]
     user_text = state["user_text"].strip()
 
+    # Detectar si fue activado por código de flujo (FLOW_RESERVA_INIT, etc)
+    flow_activated = conversation.customer_memory.get("flow_activated_by_code") == "true"
+    if flow_activated:
+        # Limpiar el flag de activación
+        updated_memory = dict(conversation.customer_memory)
+        updated_memory.pop("flow_activated_by_code", None)
+        updated_memory.pop("flow_activation_code", None)
+        updated_conversation = conversation.model_copy(update={"customer_memory": updated_memory})
+        
+        # Enviar saludo inicial del flujo
+        customer_name = conversation.customer_name
+        if customer_name:
+            greeting = f"¡Hola {customer_name}! Bienvenido al sistema de reservas.\n¿Qué fecha y horario te gustaría reservar?"
+        else:
+            greeting = "¡Hola! Bienvenido al sistema de reservas.\n¿Cómo te llamás?"
+        return {**state, "response_text": greeting, "conversation": updated_conversation}
+
     # Step 1: Saludo inicial (máximo 2 líneas) si es la primera interacción
     if _is_first_interaction(conversation):
         greeting = "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
@@ -1041,6 +1070,57 @@ def _get_active_flows() -> list[dict[str, Any]]:
         return flows
     except Exception:
         return []
+
+
+def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None]:
+    """
+    Detecta si el mensaje contiene un código de activación de flujo.
+    Retorna: (flow_name, domain) si detecta un código, sino (None, None)
+    
+    Formatos soportados:
+    - FLOW_<NOMBRE>_INIT (ej: FLOW_RESERVA_INIT)
+    - START_<NOMBRE> (ej: START_RESERVA)
+    """
+    text = user_text.strip().upper()
+    
+    # Formato FLOW_<NOMBRE>_INIT
+    if text.startswith("FLOW_") and text.endswith("_INIT"):
+        flow_name = text.replace("FLOW_", "").replace("_INIT", "")
+        # Mapear nombres comunes a dominios
+        domain_map = {
+            "RESERVA": "bookings",
+            "RESERVAS": "bookings",
+            "BOOKING": "bookings",
+            "COMPRA": "purchases",
+            "COMPRAS": "purchases",
+            "PURCHASE": "purchases",
+            "RECLAMO": "claims",
+            "RECLAMOS": "claims",
+            "CLAIM": "claims",
+        }
+        domain = domain_map.get(flow_name)
+        if domain:
+            return (flow_name.lower(), domain)
+    
+    # Formato START_<NOMBRE>
+    if text.startswith("START_"):
+        flow_name = text.replace("START_", "")
+        domain_map = {
+            "RESERVA": "bookings",
+            "RESERVAS": "bookings",
+            "BOOKING": "bookings",
+            "COMPRA": "purchases",
+            "COMPRAS": "purchases",
+            "PURCHASE": "purchases",
+            "RECLAMO": "claims",
+            "RECLAMOS": "claims",
+            "CLAIM": "claims",
+        }
+        domain = domain_map.get(flow_name)
+        if domain:
+            return (flow_name.lower(), domain)
+    
+    return (None, None)
 
 
 def _show_menu(flows: list[dict[str, Any]]) -> str:

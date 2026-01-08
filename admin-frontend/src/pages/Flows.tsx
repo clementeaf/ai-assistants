@@ -15,6 +15,7 @@ import {
 } from '../lib/api/flows';
 import FlowEditor from '../components/Flows/FlowEditor';
 import WhatsAppConnection from '../components/Flows/WhatsAppConnection';
+import FlowLinkGenerator from '../components/Flows/FlowLinkGenerator';
 import axios from 'axios';
 
 /**
@@ -435,20 +436,33 @@ function Flows() {
         </div>
 
         {/* Panel derecho - Editor de flujo */}
-        <div className="col-span-3 flex flex-col min-h-0">
+        <div className="col-span-3 flex flex-col min-h-0 space-y-4">
           {selectedFlow ? (
-          <FlowEditor
-            flowName={selectedFlow.name}
-            stages={stages}
-            loading={loading}
-            onUpdateStage={handleUpdateStagePrompt}
-            onDeleteStage={handleDeleteStage}
-            onMoveStage={handleMoveStage}
-            onAddModule={handleAddModuleClick}
-            onAddModuleConfirm={handleAddModule}
-            showAddModule={showAddModule}
-            onCloseAddModule={() => setShowAddModule(false)}
-          />
+            <>
+              {/* Generador de links */}
+              <div className="flex-shrink-0">
+                <FlowLinkGenerator 
+                  flow={selectedFlow} 
+                  whatsappNumber="56959263366"
+                />
+              </div>
+              
+              {/* Editor de flujo */}
+              <div className="flex-1 min-h-0">
+                <FlowEditor
+                  flowName={selectedFlow.name}
+                  stages={stages}
+                  loading={loading}
+                  onUpdateStage={handleUpdateStagePrompt}
+                  onDeleteStage={handleDeleteStage}
+                  onMoveStage={handleMoveStage}
+                  onAddModule={handleAddModuleClick}
+                  onAddModuleConfirm={handleAddModule}
+                  showAddModule={showAddModule}
+                  onCloseAddModule={() => setShowAddModule(false)}
+                />
+              </div>
+            </>
           ) : (
             <div className="flex-1 bg-white rounded-lg shadow flex items-center justify-center">
               <div className="text-center text-gray-500">
