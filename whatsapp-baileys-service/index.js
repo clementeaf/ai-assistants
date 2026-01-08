@@ -514,9 +514,27 @@ async function connectWhatsApp() {
     logger.info({ messageCount: messages.length, type: m.type }, 'Evento messages.upsert recibido');
     
     // CRÍTICO: Solo procesar mensajes nuevos (type 'notify'), NO historial
+    // PERO: Si es un mensaje a uno mismo (fromMe: true), también procesarlo aunque sea 'append'
     if (m.type !== 'notify') {
-      logger.debug({ type: m.type }, 'Ignorando mensajes no-notify (historial)');
-      return;
+      // Verificar si hay algún mensaje a uno mismo que debamos procesar
+      const hasSelfMessage = messages.some(msg => {
+        const ourJid = sock.user?.id || null;
+        const ourNumberFull = ourJid ? ourJid.split('@')[0] : null;
+        const ourNumber = ourNumberFull ? ourNumberFull.split(':')[0] : null;
+        const remoteJid = msg.key.remoteJid;
+        let remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
+        if (remoteNumber && remoteNumber.includes(':')) {
+          remoteNumber = remoteNumber.split(':')[0];
+        }
+        return msg.key.fromMe && ourNumber && remoteNumber && remoteNumber === ourNumber;
+      });
+      
+      if (!hasSelfMessage) {
+        logger.debug({ type: m.type }, 'Ignorando mensajes no-notify (historial)');
+        return;
+      } else {
+        logger.info({ type: m.type }, 'Procesando mensaje a uno mismo aunque sea tipo append');
+      }
     }
     
     // Obtener nuestro número de WhatsApp
