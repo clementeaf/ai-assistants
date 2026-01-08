@@ -50,13 +50,14 @@ if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
 /**
  * Envía un mensaje al backend Python
  */
-async function sendToBackend(fromNumber, text, messageId, timestamp) {
+async function sendToBackend(fromNumber, text, messageId, timestamp, pushName = null) {
   try {
     const payload = {
       message_id: messageId || `msg-${Date.now()}`,
       from_number: fromNumber,
       text: text,
       timestamp_iso: timestamp || new Date().toISOString(),
+      customer_name: pushName, // Nombre del usuario de WhatsApp
     };
 
     const headers = {
@@ -404,11 +405,15 @@ async function connectWhatsApp() {
         const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
         const isToSelf = ourNumber && remoteNumber && remoteNumber === ourNumber;
         
+        // Capturar el nombre del usuario de WhatsApp (si está disponible)
+        const pushName = msg.pushName || null;
+        
         logger.info({ 
           fromMe: msg.key.fromMe, 
           remoteJid, 
           ourNumber, 
           isToSelf,
+          pushName,
           hasMessage: !!msg.message 
         }, 'Procesando mensaje');
         
@@ -447,6 +452,9 @@ async function connectWhatsApp() {
         const from = msg.key.remoteJid;
         const messageId = msg.key.id;
         const timestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+        
+        // Capturar el nombre del usuario de WhatsApp (si está disponible)
+        const pushName = msg.pushName || null;
 
         // Crear ID único para el mensaje (combinar messageId + from + timestamp)
         const uniqueMessageId = `${messageId}-${from}-${timestamp}`;
@@ -477,11 +485,11 @@ async function connectWhatsApp() {
           }
         }
 
-        logger.info({ from: fromNumber, text }, 'Mensaje recibido');
+        logger.info({ from: fromNumber, pushName, text }, 'Mensaje recibido');
 
         try {
           // Enviar al backend Python
-          const response = await sendToBackend(fromNumber, text, messageId, timestamp);
+          const response = await sendToBackend(fromNumber, text, messageId, timestamp, pushName);
 
           // Enviar respuesta del backend a WhatsApp
           if (response.response_text) {

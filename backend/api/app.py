@@ -135,8 +135,27 @@ def create_app() -> FastAPI:
 
         inbound = InboundMessage(channel=Channel.whatsapp, sender_id=payload.from_number, text=payload.text)
         customer_id = payload.customer_id or payload.from_number
+        
+        # Si viene customer_name de WhatsApp, cargar la conversación y actualizar el nombre
+        # antes de procesarla (si aún no tiene nombre)
+        conversation_id = inbound.conversation_id()
+        existing_conv = store.get(conversation_id)
+        if payload.customer_name and (existing_conv is None or existing_conv.customer_name is None):
+            # Crear o actualizar la conversación con el nombre de WhatsApp
+            if existing_conv is None:
+                from ai_assistants.orchestrator.state import ConversationState
+                existing_conv = ConversationState(
+                    conversation_id=conversation_id,
+                    customer_id=customer_id,
+                    customer_name=payload.customer_name,
+                )
+                store.put(existing_conv)
+            else:
+                updated_conv = existing_conv.model_copy(update={"customer_name": payload.customer_name})
+                store.put(updated_conv)
+        
         result = orchestrator.run_turn(
-            conversation_id=inbound.conversation_id(),
+            conversation_id=conversation_id,
             user_text=inbound.text,
             event_id=payload.message_id,
             customer_id=customer_id,

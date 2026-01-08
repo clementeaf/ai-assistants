@@ -70,6 +70,7 @@ class WhatsAppGatewayInboundRequest(BaseModel):
     text: str = Field(min_length=1)
     timestamp_iso: str = Field(min_length=1)
     customer_id: str | None = None
+    customer_name: str | None = None  # Nombre del perfil de WhatsApp
 
 
 class WhatsAppGatewayInboundResponse(BaseModel):
