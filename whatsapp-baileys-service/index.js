@@ -483,6 +483,25 @@ async function connectWhatsApp() {
           logger.error({ error: error.message }, 'Error eliminando credenciales');
         }
       }
+      
+      // Si hay error 440 (conflict - otra sesión activa), eliminar credenciales y forzar nuevo QR
+      if (statusCode === 440) {
+        logger.warn('⚠️  Conflicto detectado (440): Otra sesión de WhatsApp Web está activa. Eliminando credenciales para generar nuevo QR...');
+        logger.warn('💡 SOLUCIÓN: Cierra todas las sesiones de WhatsApp Web en otros dispositivos/navegadores y escanea el nuevo QR');
+        try {
+          const credsFiles = ['creds.json', 'app-state-sync-key.json', 'app-state-sync-version.json', 'pre-key.json', 'session.json', 'sender-key.json'];
+          credsFiles.forEach(file => {
+            const filePath = path.join(WHATSAPP_AUTH_DIR, file);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              logger.info({ file }, 'Credencial eliminada por conflicto');
+            }
+          });
+          forceReconnect = true; // Forzar reconexión después de eliminar credenciales
+        } catch (error) {
+          logger.error({ error: error.message }, 'Error eliminando credenciales por conflicto');
+        }
+      }
 
       if (shouldReconnect || forceReconnect) {
         logger.info('Reconectando...');
