@@ -426,12 +426,17 @@ async function connectWhatsApp() {
         hasMessage: !!msg.message 
       }, 'Procesando mensaje');
       
-      // IGNORAR TODOS los mensajes propios (fromMe=true)
-      // Solo procesar mensajes que RECIBIMOS de otros
-      if (msg.key.fromMe) {
-        logger.debug({ from: remoteJid }, 'Mensaje propio ignorado');
-        continue;
-      }
+        // IGNORAR mensajes propios EXCEPTO si son mensajes enviados a nuestro propio número (isToSelf)
+        // Esto permite probar enviándose mensajes a uno mismo
+        if (msg.key.fromMe && !isToSelf) {
+          logger.debug({ from: remoteJid }, 'Mensaje propio ignorado (no es para nosotros)');
+          continue;
+        }
+        
+        // Si es mensaje propio pero es para nuestro número, procesarlo
+        if (msg.key.fromMe && isToSelf) {
+          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número) - Procesando');
+        }
 
       let text = null;
       
