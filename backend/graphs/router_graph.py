@@ -39,6 +39,8 @@ from ai_assistants.tools.purchases_tools import get_order, get_tracking_status, 
 from ai_assistants.routing.domain_router import Domain, route_domain
 from ai_assistants.memory.vector_runtime import get_vector_memory_tools
 from ai_assistants.utils.time import utc_now
+from ai_assistants.adapters.registry import get_booking_log_adapter
+from ai_assistants.observability.logging import get_logger
 
 RouterFn = Callable[[str], Domain]
 
@@ -82,6 +84,9 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
         # 1. Detectar códigos de activación de flujo o menú (FLOW_RESERVA_INIT, MENU_INIT, etc)
         flow_name, flow_domain, is_menu = _detect_flow_activation_code(user_text)
         if is_menu:
+            # Registrar acceso por link (menú)
+            _register_link_access(conversation, user_text.strip().upper(), flow_domain="menú")
+            
             # Activar menú directamente
             flows = _get_active_flows()
             menu_data = _show_menu(flows)
@@ -100,6 +105,9 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
                 "list_items": menu_data.get("list_items"),
             }
         if flow_domain:
+            # Registrar acceso por link (flujo específico)
+            _register_link_access(conversation, user_text.strip().upper(), flow_domain=flow_domain)
+            
             # Marcar en memoria que se activó por código
             updated_memory = dict(conversation.customer_memory)
             updated_memory["flow_activated_by_code"] = "true"
@@ -1092,6 +1100,71 @@ def _get_active_flows() -> list[dict[str, Any]]:
         return flows
     except Exception:
         return []
+
+
+def _register_link_access(
+    conversation: ConversationState,
+    activation_code: str,
+    flow_domain: str | None = None,
+) -> None:
+    """
+    Registra automáticamente el acceso por link en el booking log.
+    @param conversation - Estado de la conversación con customer_id y customer_name
+    @param activation_code - Código de activación usado (ej: FLOW_RESERVA_INIT)
+    @param flow_domain - Dominio del flujo activado (opcional)
+    """
+    logger = get_logger()
+    
+    try:
+        adapter = get_booking_log_adapter()
+    except RuntimeError:
+        # Si no hay adapter configurado, solo loguear y continuar
+        logger.debug("Booking log adapter no configurado, omitiendo registro")
+        return
+    except Exception as e:
+        logger.warning("Error obteniendo booking log adapter", error=str(e))
+        return
+    
+    # Obtener datos del cliente
+    customer_id = conversation.customer_id or _infer_customer_id(conversation.conversation_id)
+    customer_name = conversation.customer_name or "Cliente"
+    
+    # Si no hay customer_id, no podemos registrar
+    if not customer_id:
+        logger.debug("No se puede registrar acceso: customer_id no disponible")
+        return
+    
+    # Obtener fecha y hora actual
+    now = utc_now()
+    date_iso = now.strftime("%Y-%m-%d")
+    time_iso = now.isoformat()
+    
+    # Usar el código de activación como booking_code
+    booking_code = activation_code.upper()
+    
+    try:
+        adapter.create_booking_log(
+            booking_code=booking_code,
+            customer_name=customer_name,
+            customer_id=customer_id,
+            date_iso=date_iso,
+            time_iso=time_iso,
+            observations=f"Acceso por link - Flujo: {flow_domain or 'menú'}",
+        )
+        logger.info(
+            "Registro de acceso por link creado",
+            booking_code=booking_code,
+            customer_id=customer_id,
+            customer_name=customer_name,
+        )
+    except Exception as e:
+        # No fallar el flujo si el registro falla, solo loguear
+        logger.warning(
+            "Error registrando acceso por link en booking log",
+            error=str(e),
+            booking_code=booking_code,
+            customer_id=customer_id,
+        )
 
 
 def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None, bool]:
