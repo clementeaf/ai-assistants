@@ -605,6 +605,16 @@ async function connectWhatsApp() {
               await sendInteractiveList(sock, from, response.response_text, response.list_title, response.list_items);
             } else {
               // Mensaje de texto normal
+              // Verificación adicional de seguridad (doble verificación)
+              if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(fromNumber)) {
+                logger.error({ 
+                  fromNumber, 
+                  allowedNumbers: ALLOWED_NUMBERS,
+                  reason: 'Intento de enviar mensaje de texto a número no autorizado - BLOQUEADO'
+                }, '🚫 SEGURIDAD: Intento de enviar mensaje de texto a número no autorizado');
+                return; // NO ENVIAR
+              }
+              
               await sock.sendMessage(from, { text: response.response_text });
               logger.info({ to: fromNumber, text: response.response_text }, '✅ Respuesta enviada (número autorizado)');
             }
