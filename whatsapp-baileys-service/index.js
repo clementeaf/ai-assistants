@@ -106,9 +106,24 @@ async function sendInteractiveButtons(sock, to, text, buttons) {
 }
 
 /**
- * Envía un mensaje interactivo con lista
+ * Envía un mensaje interactivo con lista (máximo 10 items)
+ * Formato Baileys para listas interactivas
+ * SEGURIDAD: Esta función solo se llama después de verificar la whitelist
  */
 async function sendInteractiveList(sock, to, text, listTitle, listItems) {
+  // Extraer número del destinatario para logging de seguridad
+  const toNumber = to ? to.replace('@s.whatsapp.net', '').replace('@c.us', '') : 'unknown';
+  
+  // Verificación adicional de seguridad (doble verificación)
+  if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(toNumber)) {
+    logger.error({ 
+      toNumber, 
+      allowedNumbers: ALLOWED_NUMBERS,
+      reason: 'Intento de enviar mensaje a número no autorizado - BLOQUEADO'
+    }, '🚫 SEGURIDAD: Intento de enviar lista a número no autorizado');
+    return; // NO ENVIAR
+  }
+  
   // Máximo 10 items en una lista de WhatsApp
   const items = listItems.slice(0, 10).map((item, idx) => ({
     title: typeof item === 'string' ? item : (item.title || `Opción ${idx + 1}`),
@@ -127,6 +142,8 @@ async function sendInteractiveList(sock, to, text, listTitle, listItems) {
     title: listTitle || 'Menú',
     buttonText: 'Ver opciones'
   });
+  
+  logger.info({ to: toNumber, items: items.length }, '✅ Mensaje interactivo con lista enviado (número autorizado)');
 }
 
 /**
