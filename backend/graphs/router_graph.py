@@ -14,12 +14,24 @@ from ai_assistants.orchestrator.state import ConversationState, MessageRole
 from ai_assistants.tools.contracts import (
     CheckAvailabilityInput,
     CreateBookingInput,
+    DeleteBookingInput,
     GetAvailableSlotsInput,
+    GetBookingInput,
     GetOrderInput,
     GetTrackingInput,
+    ListBookingsInput,
     ListOrdersInput,
+    UpdateBookingInput,
 )
-from ai_assistants.tools.bookings_tools import check_availability, create_booking, get_available_slots
+from ai_assistants.tools.bookings_tools import (
+    check_availability,
+    create_booking,
+    delete_booking,
+    get_available_slots,
+    get_booking,
+    list_bookings,
+    update_booking,
+)
 from ai_assistants.tools.purchases_tools import get_order, get_tracking_status, list_orders
 from ai_assistants.routing.domain_router import Domain, route_domain
 from ai_assistants.memory.vector_runtime import get_vector_memory_tools
@@ -57,8 +69,31 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
     """Create a route node using the provided router function."""
 
     def _node(state: GraphState) -> GraphState:
-        domain = router_fn(state["user_text"])
-        conversation = state["conversation"].model_copy(update={"routed_domain": domain})
+        conversation = state["conversation"]
+        user_text = state["user_text"]
+        
+        # Si ya hay un dominio activo y el usuario está en medio de un flujo, mantener el dominio
+        if conversation.routed_domain == "bookings":
+            # Si ya tiene nombre o fecha solicitada, mantener bookings
+            if conversation.customer_name is not None or conversation.requested_booking_date is not None:
+                domain = "bookings"
+            else:
+                # Si no hay contexto de bookings, intentar detectar de nuevo
+                domain = router_fn(user_text)
+        elif conversation.routed_domain == "purchases":
+            # Si ya tiene order_id o tracking_id, mantener purchases
+            if conversation.last_order_id is not None or conversation.last_tracking_id is not None:
+                domain = "purchases"
+            else:
+                domain = router_fn(user_text)
+        elif conversation.routed_domain == "claims":
+            # Mantener claims si ya está en ese flujo
+            domain = "claims"
+        else:
+            # Sin contexto previo, usar el router normal
+            domain = router_fn(user_text)
+        
+        conversation = conversation.model_copy(update={"routed_domain": domain})
         return {**state, "domain": domain, "conversation": conversation}
 
     return _node
@@ -512,6 +547,13 @@ def bookings_node(state: GraphState) -> GraphState:
 
     # Step 2: Capturar nombre del usuario si no lo tenemos
     if conversation.customer_name is None:
+        # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
+        text_lower = user_text.lower()
+        if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
+            # El usuario está expresando intención de reservar, no dando su nombre
+            response = "Perfecto, te ayudo con tu reserva. ¿Cómo te llamás?"
+            return {**state, "response_text": response, "conversation": conversation}
+        
         name = _extract_name_from_text(user_text)
         if name is not None:
             conversation = conversation.model_copy(update={"customer_name": name})
@@ -559,6 +601,10 @@ def bookings_node(state: GraphState) -> GraphState:
         plan = planner.plan(
             user_text=user_text,
             customer_id=customer_id,
+            customer_name=conversation.customer_name,
+            requested_booking_date=conversation.requested_booking_date,
+            requested_booking_start_time=conversation.requested_booking_start_time,
+            requested_booking_end_time=conversation.requested_booking_end_time,
         )
         if plan is not None:
             for action in plan.actions:
@@ -683,6 +729,136 @@ def bookings_node(state: GraphState) -> GraphState:
                         f"{booking_date} de {':'.join(start)} a {':'.join(end)}.\n"
                         f"Te enviaremos un email de confirmación y te avisaremos con anticipación como recordatorio."
                     )
+                    if customer_id is not None:
+                        tools = get_vector_memory_tools()
+                        if tools is not None:
+                            tools.remember(customer_id=customer_id, text=response)
+                    return {**state, "response_text": response, "conversation": conversation}
+
+                # Obtener reserva por ID
+                if action.tool == "get_booking":
+                    booking_id = action.args.get("booking_id")
+                    if not isinstance(booking_id, str) or booking_id.strip() == "":
+                        return {
+                            **state,
+                            "response_text": "Necesito el ID de la reserva para consultarla. ¿Cuál es el ID de tu reserva?",
+                            "conversation": conversation,
+                        }
+                    booking_out = get_booking(GetBookingInput(booking_id=booking_id))
+                    if not booking_out.found:
+                        return {
+                            **state,
+                            "response_text": f"No encontré la reserva {booking_id}. Verificá el ID e intentá de nuevo.",
+                            "conversation": conversation,
+                        }
+                    start = booking_out.start_time_iso.split("T")[1].split(":")[:2] if booking_out.start_time_iso else ["", ""]
+                    end = booking_out.end_time_iso.split("T")[1].split(":")[:2] if booking_out.end_time_iso else ["", ""]
+                    response = (
+                        f"Reserva {booking_out.booking_id}:\n"
+                        f"- Cliente: {booking_out.customer_name}\n"
+                        f"- Fecha: {booking_out.date_iso}\n"
+                        f"- Horario: {':'.join(start)} a {':'.join(end)}\n"
+                        f"- Estado: {booking_out.status}"
+                    )
+                    return {**state, "response_text": response, "conversation": conversation}
+
+                # Listar reservas del cliente
+                if action.tool == "list_bookings":
+                    if customer_id is None:
+                        return {
+                            **state,
+                            "response_text": "Necesito tu identificador de cliente para listar tus reservas.",
+                            "conversation": conversation,
+                        }
+                    bookings_out = list_bookings(ListBookingsInput(customer_id=customer_id))
+                    if bookings_out.error_code is not None:
+                        return {
+                            **state,
+                            "response_text": "No pude consultar tus reservas en este momento. Probá de nuevo en unos minutos.",
+                            "conversation": conversation,
+                        }
+                    if len(bookings_out.bookings) == 0:
+                        return {
+                            **state,
+                            "response_text": "No tenés reservas registradas. ¿Querés hacer una nueva reserva?",
+                            "conversation": conversation,
+                        }
+                    lines = ["Tus reservas:"]
+                    for booking in bookings_out.bookings[:10]:
+                        start = booking.start_time_iso.split("T")[1].split(":")[:2]
+                        end = booking.end_time_iso.split("T")[1].split(":")[:2]
+                        lines.append(
+                            f"- {booking.booking_id}: {booking.date_iso} de {':'.join(start)} a {':'.join(end)} ({booking.status})"
+                        )
+                    return {**state, "response_text": "\n".join(lines), "conversation": conversation}
+
+                # Modificar reserva
+                if action.tool == "update_booking":
+                    booking_id = action.args.get("booking_id")
+                    if not isinstance(booking_id, str) or booking_id.strip() == "":
+                        return {
+                            **state,
+                            "response_text": "Necesito el ID de la reserva para modificarla. ¿Cuál es el ID de tu reserva?",
+                            "conversation": conversation,
+                        }
+                    update_out = update_booking(
+                        UpdateBookingInput(
+                            booking_id=booking_id,
+                            date_iso=action.args.get("date_iso"),
+                            start_time_iso=action.args.get("start_time_iso"),
+                            end_time_iso=action.args.get("end_time_iso"),
+                            status=action.args.get("status"),
+                        )
+                    )
+                    if not update_out.success:
+                        if update_out.error_code == "booking_not_found":
+                            return {
+                                **state,
+                                "response_text": f"No encontré la reserva {booking_id}. Verificá el ID e intentá de nuevo.",
+                                "conversation": conversation,
+                            }
+                        return {
+                            **state,
+                            "response_text": "No pude modificar la reserva en este momento. Probá de nuevo en unos minutos.",
+                            "conversation": conversation,
+                        }
+                    start = update_out.start_time_iso.split("T")[1].split(":")[:2] if update_out.start_time_iso else ["", ""]
+                    end = update_out.end_time_iso.split("T")[1].split(":")[:2] if update_out.end_time_iso else ["", ""]
+                    response = (
+                        f"¡Reserva {update_out.booking_id} actualizada!\n"
+                        f"- Fecha: {update_out.date_iso}\n"
+                        f"- Horario: {':'.join(start)} a {':'.join(end)}\n"
+                        f"- Estado: {update_out.status}"
+                    )
+                    if customer_id is not None:
+                        tools = get_vector_memory_tools()
+                        if tools is not None:
+                            tools.remember(customer_id=customer_id, text=response)
+                    return {**state, "response_text": response, "conversation": conversation}
+
+                # Eliminar reserva
+                if action.tool == "delete_booking":
+                    booking_id = action.args.get("booking_id")
+                    if not isinstance(booking_id, str) or booking_id.strip() == "":
+                        return {
+                            **state,
+                            "response_text": "Necesito el ID de la reserva para eliminarla. ¿Cuál es el ID de tu reserva?",
+                            "conversation": conversation,
+                        }
+                    delete_out = delete_booking(DeleteBookingInput(booking_id=booking_id))
+                    if not delete_out.success:
+                        if delete_out.error_code == "booking_not_found":
+                            return {
+                                **state,
+                                "response_text": f"No encontré la reserva {booking_id}. Verificá el ID e intentá de nuevo.",
+                                "conversation": conversation,
+                            }
+                        return {
+                            **state,
+                            "response_text": "No pude eliminar la reserva en este momento. Probá de nuevo en unos minutos.",
+                            "conversation": conversation,
+                        }
+                    response = f"Reserva {delete_out.booking_id} eliminada correctamente."
                     if customer_id is not None:
                         tools = get_vector_memory_tools()
                         if tools is not None:

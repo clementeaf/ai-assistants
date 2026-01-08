@@ -4,6 +4,8 @@ from ai_assistants.adapters.bookings import BookingsAdapter
 from ai_assistants.adapters.demo_bookings import DemoBookingsAdapter
 from ai_assistants.adapters.demo_purchases import DemoPurchasesAdapter
 from ai_assistants.adapters.external_hook import ExternalHookPurchasesAdapter, load_external_hook_config
+from ai_assistants.adapters.mcp_calendar_adapter import MCPCalendarAdapter
+from ai_assistants.adapters.mcp_calendar_config import load_mcp_calendar_config
 from ai_assistants.adapters.purchases import PurchasesAdapter
 
 _purchases_adapter: PurchasesAdapter | None = None
@@ -35,12 +37,21 @@ def set_purchases_adapter(adapter: PurchasesAdapter | None) -> None:
 def get_bookings_adapter() -> BookingsAdapter:
     """Return the configured bookings adapter instance.
 
-    For now, this returns an in-memory demo adapter. In production this should be
-    backed by real integrations (calendar system/booking system).
+    Priority:
+    1. MCP Calendar adapter (if AI_ASSISTANTS_MCP_CALENDAR_URL is set)
+    2. In-memory demo adapter (fallback)
     """
     global _bookings_adapter
     if _bookings_adapter is None:
-        _bookings_adapter = DemoBookingsAdapter()
+        mcp_config = load_mcp_calendar_config()
+        if mcp_config is not None:
+            _bookings_adapter = MCPCalendarAdapter(
+                mcp_server_url=mcp_config.server_url,
+                api_key=mcp_config.api_key,
+                timeout_seconds=mcp_config.timeout_seconds,
+            )
+        else:
+            _bookings_adapter = DemoBookingsAdapter()
     return _bookings_adapter
 
 

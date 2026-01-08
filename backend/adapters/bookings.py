@@ -30,3 +30,16 @@ class BookingsAdapter(Protocol):
     def list_bookings(self, customer_id: str) -> list[Booking]:
         """Return bookings for the given customer id."""
 
+    def update_booking(
+        self,
+        booking_id: str,
+        date_iso: str | None = None,
+        start_time_iso: str | None = None,
+        end_time_iso: str | None = None,
+        status: str | None = None,
+    ) -> Booking | None:
+        """Update an existing booking. Returns the updated booking or None if not found."""
+
+    def delete_booking(self, booking_id: str) -> bool:
+        """Delete a booking. Returns True if deleted, False if not found."""
+

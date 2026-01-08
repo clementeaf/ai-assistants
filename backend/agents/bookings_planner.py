@@ -16,7 +16,16 @@ class ChatClient(Protocol):
         ...
 
 
-ToolName = Literal["get_available_slots", "check_availability", "create_booking", "vector_recall"]
+ToolName = Literal[
+    "get_available_slots",
+    "check_availability",
+    "create_booking",
+    "get_booking",
+    "list_bookings",
+    "update_booking",
+    "delete_booking",
+    "vector_recall",
+]
 
 
 class ToolCallAction(BaseModel):
@@ -64,12 +73,20 @@ class BookingsPlanner:
         *,
         user_text: str,
         customer_id: str | None,
+        customer_name: str | None = None,
+        requested_booking_date: str | None = None,
+        requested_booking_start_time: str | None = None,
+        requested_booking_end_time: str | None = None,
     ) -> PlannerOutput | None:
         user = json.dumps(
             {
                 "user_text": user_text,
                 "context": {
                     "customer_id": customer_id,
+                    "customer_name": customer_name,
+                    "requested_booking_date": requested_booking_date,
+                    "requested_booking_start_time": requested_booking_start_time,
+                    "requested_booking_end_time": requested_booking_end_time,
                 },
             },
             ensure_ascii=False,

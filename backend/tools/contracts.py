@@ -118,10 +118,93 @@ class CreateBookingOutput(BaseModel):
     """Output contract for creating a booking."""
 
     success: bool
+    booking_id: str | None = None
+    date_iso: str | None = None
+    start_time_iso: str | None = None
+    end_time_iso: str | None = None
+    error_code: str | None = None
+
+
+class GetBookingInput(BaseModel):
+    """Input contract for getting a booking by ID."""
+
+    booking_id: str = Field(min_length=1)
+
+
+class GetBookingOutput(BaseModel):
+    """Output contract for getting a booking."""
+
+    found: bool
+    booking_id: str | None
+    customer_id: str | None
+    customer_name: str | None
+    date_iso: str | None
+    start_time_iso: str | None
+    end_time_iso: str | None
+    status: str | None
+    created_at_iso: str | None
+    error_code: str | None = None
+
+
+class ListBookingsInput(BaseModel):
+    """Input contract for listing bookings of a customer."""
+
+    customer_id: str = Field(min_length=1)
+
+
+class BookingSummary(BaseModel):
+    """Booking summary used in list outputs."""
+
+    booking_id: str
+    customer_id: str
+    customer_name: str
+    date_iso: str
+    start_time_iso: str
+    end_time_iso: str
+    status: str
+    created_at_iso: str
+
+
+class ListBookingsOutput(BaseModel):
+    """Output contract for listing bookings."""
+
+    bookings: list[BookingSummary]
+    error_code: str | None = None
+
+
+class UpdateBookingInput(BaseModel):
+    """Input contract for updating a booking."""
+
+    booking_id: str = Field(min_length=1)
+    date_iso: str | None = None
+    start_time_iso: str | None = None
+    end_time_iso: str | None = None
+    status: str | None = None
+
+
+class UpdateBookingOutput(BaseModel):
+    """Output contract for updating a booking."""
+
+    success: bool
     booking_id: str | None
     date_iso: str | None
     start_time_iso: str | None
     end_time_iso: str | None
+    status: str | None
+    error_code: str | None = None
+
+
+class DeleteBookingInput(BaseModel):
+    """Input contract for deleting a booking."""
+
+    booking_id: str = Field(min_length=1)
+
+
+class DeleteBookingOutput(BaseModel):
+    """Output contract for deleting a booking."""
+
+    success: bool
+    booking_id: str | None
     error_code: str | None = None
 
 

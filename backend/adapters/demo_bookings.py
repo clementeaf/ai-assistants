@@ -131,3 +131,51 @@ class DemoBookingsAdapter(BookingsAdapter):
         """Return bookings for the given customer id."""
         return [booking for booking in self._bookings.values() if booking.customer_id == customer_id]
 
+    def update_booking(
+        self,
+        booking_id: str,
+        date_iso: str | None = None,
+        start_time_iso: str | None = None,
+        end_time_iso: str | None = None,
+        status: str | None = None,
+    ) -> Booking | None:
+        """Update an existing booking. Returns the updated booking or None if not found."""
+        booking = self._bookings.get(booking_id)
+        if booking is None:
+            return None
+
+        updated_fields = {}
+        if date_iso is not None:
+            updated_fields["date_iso"] = date_iso
+        if start_time_iso is not None:
+            updated_fields["start_time_iso"] = start_time_iso
+        if end_time_iso is not None:
+            updated_fields["end_time_iso"] = end_time_iso
+        if status is not None:
+            try:
+                updated_fields["status"] = BookingStatus(status)
+            except ValueError:
+                return None
+
+        updated_booking = Booking(
+            booking_id=booking.booking_id,
+            customer_id=booking.customer_id,
+            customer_name=booking.customer_name,
+            date_iso=updated_fields.get("date_iso", booking.date_iso),
+            start_time_iso=updated_fields.get("start_time_iso", booking.start_time_iso),
+            end_time_iso=updated_fields.get("end_time_iso", booking.end_time_iso),
+            status=updated_fields.get("status", booking.status),
+            created_at=booking.created_at,
+            confirmation_email_sent=booking.confirmation_email_sent,
+            reminder_sent=booking.reminder_sent,
+        )
+        self._bookings[booking_id] = updated_booking
+        return updated_booking
+
+    def delete_booking(self, booking_id: str) -> bool:
+        """Delete a booking. Returns True if deleted, False if not found."""
+        if booking_id not in self._bookings:
+            return False
+        del self._bookings[booking_id]
+        return True
+
