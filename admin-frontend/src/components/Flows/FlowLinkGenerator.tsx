@@ -84,6 +84,11 @@ export default function FlowLinkGenerator({ flow, whatsappNumber }: FlowLinkGene
           <li>Al enviar, el sistema activa automáticamente este flujo</li>
           <li>El usuario recibe el saludo inicial del flujo</li>
         </ul>
+        <p className="font-medium mt-2 mb-1">Palabras reservadas:</p>
+        <ul className="list-disc list-inside space-y-1">
+          <li><code className="bg-gray-100 px-1 rounded">menu</code> o <code className="bg-gray-100 px-1 rounded">menú</code> - Muestra el menú de flujos</li>
+          <li><code className="bg-gray-100 px-1 rounded">MENU_INIT</code> - Activa el menú desde un link</li>
+        </ul>
       </div>
     </div>
   );

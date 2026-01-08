@@ -75,8 +75,22 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
         conversation = state["conversation"]
         user_text = state["user_text"]
         
-        # 1. Detectar códigos de activación de flujo (FLOW_RESERVA_INIT, START_RESERVA, etc)
-        flow_name, flow_domain = _detect_flow_activation_code(user_text)
+        # 1. Detectar códigos de activación de flujo o menú (FLOW_RESERVA_INIT, MENU_INIT, etc)
+        flow_name, flow_domain, is_menu = _detect_flow_activation_code(user_text)
+        if is_menu:
+            # Activar menú directamente
+            flows = _get_active_flows()
+            menu_text = _show_menu(flows)
+            # Guardar los flujos en memoria para poder mapear números después
+            updated_memory = dict(conversation.customer_memory)
+            updated_memory["menu_flows"] = json.dumps(flows)
+            updated_conversation = conversation.model_copy(update={"customer_memory": updated_memory})
+            return {
+                **state,
+                "domain": "unknown",
+                "conversation": updated_conversation,
+                "response_text": menu_text,
+            }
         if flow_domain:
             # Marcar en memoria que se activó por código
             updated_memory = dict(conversation.customer_memory)
@@ -1072,16 +1086,24 @@ def _get_active_flows() -> list[dict[str, Any]]:
         return []
 
 
-def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None]:
+def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None, bool]:
     """
-    Detecta si el mensaje contiene un código de activación de flujo.
-    Retorna: (flow_name, domain) si detecta un código, sino (None, None)
+    Detecta si el mensaje contiene un código de activación de flujo o menú.
+    Retorna: (flow_name, domain, is_menu) 
+    - Si detecta código de menú: (None, None, True)
+    - Si detecta código de flujo: (flow_name, domain, False)
+    - Si no detecta nada: (None, None, False)
     
     Formatos soportados:
     - FLOW_<NOMBRE>_INIT (ej: FLOW_RESERVA_INIT)
     - START_<NOMBRE> (ej: START_RESERVA)
+    - MENU_INIT, FLOW_MENU_INIT (para mostrar menú)
     """
     text = user_text.strip().upper()
+    
+    # Detectar código de menú
+    if text in ("MENU_INIT", "FLOW_MENU_INIT", "START_MENU"):
+        return (None, None, True)
     
     # Formato FLOW_<NOMBRE>_INIT
     if text.startswith("FLOW_") and text.endswith("_INIT"):
@@ -1100,7 +1122,7 @@ def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None
         }
         domain = domain_map.get(flow_name)
         if domain:
-            return (flow_name.lower(), domain)
+            return (flow_name.lower(), domain, False)
     
     # Formato START_<NOMBRE>
     if text.startswith("START_"):
@@ -1118,9 +1140,9 @@ def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None
         }
         domain = domain_map.get(flow_name)
         if domain:
-            return (flow_name.lower(), domain)
+            return (flow_name.lower(), domain, False)
     
-    return (None, None)
+    return (None, None, False)
 
 
 def _show_menu(flows: list[dict[str, Any]]) -> str:
@@ -1179,7 +1201,7 @@ def unknown_node(state: GraphState) -> GraphState:
     # Respuesta por defecto
     return {
         **state,
-        "response_text": "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más.\n\nO escribe *menu* para ver todas las opciones disponibles.",
+        "response_text": "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más.\n\nO escribe *menu* o *menú* para ver todas las opciones disponibles.",
     }
 
 

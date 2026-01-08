@@ -440,7 +440,51 @@ function Flows() {
           {selectedFlow ? (
             <>
               {/* Generador de links */}
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 space-y-4">
+                {/* Link genérico para menú */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-purple-900">Link Genérico - Menú de Flujos</h3>
+                    <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                      MENU
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Código de activación:</label>
+                      <code className="block mt-1 bg-white px-3 py-2 rounded border text-sm font-mono">
+                        MENU_INIT
+                      </code>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Link de WhatsApp:</label>
+                      <div className="flex gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={`https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`}
+                          readOnly
+                          className="flex-1 px-3 py-2 border rounded text-sm bg-white"
+                        />
+                        <button
+                          onClick={async () => {
+                            const link = `https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`;
+                            await navigator.clipboard.writeText(link);
+                            alert('Link copiado al portapapeles');
+                          }}
+                          className="px-4 py-2 bg-purple-500 text-white rounded font-medium hover:bg-purple-600 transition-colors"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 bg-white p-3 rounded border">
+                      <p className="font-medium mb-1">Este link muestra el menú de todos los flujos disponibles</p>
+                      <p>El usuario puede seleccionar un flujo escribiendo el número correspondiente</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Link específico del flujo */}
                 <FlowLinkGenerator 
                   flow={selectedFlow} 
                   whatsappNumber="56959263366"
