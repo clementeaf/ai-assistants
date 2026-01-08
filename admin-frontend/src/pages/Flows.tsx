@@ -373,19 +373,18 @@ function Flows() {
         {/* Panel derecho - Editor de flujo */}
         <div className="col-span-3 flex flex-col min-h-0">
           {selectedFlow ? (
-            <FlowEditor
-              flowName={selectedFlow.name}
-              stages={stages}
-              loading={loading}
-              onUpdateStage={handleUpdateStagePrompt}
-              onDeleteStage={handleDeleteStage}
-              onMoveStage={handleMoveStage}
-              onAddModule={(moduleType) => {
-                handleAddModule(moduleType);
-              }}
-              showAddModule={showAddModule}
-              onCloseAddModule={() => setShowAddModule(false)}
-            />
+          <FlowEditor
+            flowName={selectedFlow.name}
+            stages={stages}
+            loading={loading}
+            onUpdateStage={handleUpdateStagePrompt}
+            onDeleteStage={handleDeleteStage}
+            onMoveStage={handleMoveStage}
+            onAddModule={handleAddModuleClick}
+            onAddModuleConfirm={handleAddModule}
+            showAddModule={showAddModule}
+            onCloseAddModule={() => setShowAddModule(false)}
+          />
           ) : (
             <div className="flex-1 bg-white rounded-lg shadow flex items-center justify-center">
               <div className="text-center text-gray-500">

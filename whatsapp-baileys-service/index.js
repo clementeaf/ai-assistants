@@ -72,6 +72,26 @@ async function sendToBackend(fromNumber, text, messageId, timestamp) {
 // Variable global para el socket (para poder enviar mensajes de prueba)
 let globalSock = null;
 
+// Cache de mensajes procesados para evitar duplicados
+const processedMessages = new Set();
+const MESSAGE_CACHE_TTL = 60000; // 60 segundos
+
+/**
+ * Limpia mensajes antiguos del cache
+ */
+function cleanMessageCache() {
+  // El Set se limpia automáticamente, pero podemos limitar su tamaño
+  if (processedMessages.size > 1000) {
+    // Si hay más de 1000 mensajes, limpiar la mitad más antigua
+    const messagesArray = Array.from(processedMessages);
+    const toRemove = messagesArray.slice(0, 500);
+    toRemove.forEach(msgId => processedMessages.delete(msgId));
+  }
+}
+
+// Limpiar cache cada 5 minutos
+setInterval(cleanMessageCache, 5 * 60 * 1000);
+
 // Configurar servidor web para mostrar QR
 app.get('/', (req, res) => {
   if (isConnected) {
@@ -328,6 +348,11 @@ async function connectWhatsApp() {
       // Solo procesar mensajes de texto nuevos (no historial)
       // También procesar mensajes con texto extendido (ephemeralMessage, viewOnceMessage, etc.)
       if (m.type === 'notify') {
+        // Ignorar mensajes propios
+        if (msg.key.fromMe) {
+          continue;
+        }
+
         let text = null;
         
         // Extraer texto de diferentes tipos de mensajes
@@ -348,6 +373,18 @@ async function connectWhatsApp() {
         const from = msg.key.remoteJid;
         const messageId = msg.key.id;
         const timestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+
+        // Crear ID único para el mensaje (combinar messageId + from + timestamp)
+        const uniqueMessageId = `${messageId}-${from}-${timestamp}`;
+        
+        // Verificar si el mensaje ya fue procesado
+        if (processedMessages.has(uniqueMessageId)) {
+          logger.debug({ messageId, from }, 'Mensaje ya procesado, ignorando');
+          continue;
+        }
+
+        // Marcar mensaje como procesado
+        processedMessages.add(uniqueMessageId);
 
         // Extraer número de teléfono (remover @s.whatsapp.net, @c.us, @g.us)
         let fromNumber = from;

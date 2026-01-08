@@ -10,7 +10,8 @@ interface FlowEditorProps {
   onUpdateStage: (stageId: string, promptText: string) => void;
   onDeleteStage: (stageId: string) => void;
   onMoveStage: (stageId: string, direction: 'up' | 'down') => void;
-  onAddModule: (moduleType: string) => void;
+  onAddModule: () => void;
+  onAddModuleConfirm: (moduleType: string) => void;
   showAddModule: boolean;
   onCloseAddModule: () => void;
 }
@@ -27,6 +28,7 @@ function FlowEditor({
   onDeleteStage,
   onMoveStage,
   onAddModule,
+  onAddModuleConfirm,
   showAddModule,
   onCloseAddModule,
 }: FlowEditorProps) {
@@ -82,15 +84,19 @@ function FlowEditor({
         )}
 
         {showAddModule && (
-          <AddStageModule
-            onAddModule={(moduleType) => {
-              if (moduleType !== '') {
-                onAddModule(moduleType);
-              }
-              onCloseAddModule();
-            }}
-            onClose={onCloseAddModule}
-          />
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="max-w-2xl w-full mx-4">
+              <AddStageModule
+                onAddModule={(moduleType) => {
+                  if (moduleType !== '') {
+                    onAddModuleConfirm(moduleType);
+                  }
+                  onCloseAddModule();
+                }}
+                onClose={onCloseAddModule}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
