@@ -16,8 +16,11 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// Cargar variables de entorno desde .env
-require('dotenv').config();
+// Cargar variables de entorno desde .env (desde el directorio del script)
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Logger (debe estar antes de usarlo)
+const logger = pino({ level: 'info' });
 
 // Configuración
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -34,12 +37,12 @@ const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS
 // SEGURIDAD: Si ALLOWED_NUMBERS está vacío, NO responder a NADIE
 if (ALLOWED_NUMBERS.length === 0) {
   logger.warn('⚠️  ALLOWED_NUMBERS está vacío. El bot NO responderá a ningún número por seguridad.');
+} else {
+  logger.info({ 
+    allowedNumbers: ALLOWED_NUMBERS,
+    count: ALLOWED_NUMBERS.length 
+  }, '✅ Whitelist de números autorizados cargada');
 }
-
-logger.info({ 
-  allowedNumbers: ALLOWED_NUMBERS,
-  count: ALLOWED_NUMBERS.length 
-}, 'Whitelist de números autorizados cargada');
 
 const TEST_NUMBER = process.env.TEST_NUMBER;
 
@@ -58,9 +61,6 @@ app.use(cors({
 
 let currentQR = null;
 let isConnected = false;
-
-// Logger
-const logger = pino({ level: 'info' });
 
 // Asegurar que el directorio de autenticación existe
 if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
