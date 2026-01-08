@@ -12,8 +12,8 @@ import {
   type AddStageRequest,
   type UpdateStageRequest,
 } from '../lib/api/flows';
-import FlowEditor from '../components/Flows/FlowEditor';
-import PromptEditor from '../components/Flows/PromptEditor';
+import StageModule from '../components/Flows/StageModule';
+import AddStageModule from '../components/Flows/AddStageModule';
 
 /**
  * Página para gestionar flujos de conversación
@@ -26,10 +26,7 @@ function Flows() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreateFlow, setShowCreateFlow] = useState(false);
-  const [showAddStage, setShowAddStage] = useState(false);
-  const [editingStage, setEditingStage] = useState<FlowStage | null>(null);
-  const [selectedStage, setSelectedStage] = useState<FlowStage | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState('');
+  const [showAddModule, setShowAddModule] = useState(false);
 
   const loadFlows = async (): Promise<void> => {
     setLoading(true);
@@ -59,8 +56,6 @@ function Flows() {
 
   const handleSelectFlow = async (flow: Flow): Promise<void> => {
     setSelectedFlow(flow);
-    setSelectedStage(null);
-    setSystemPrompt('');
     await loadStages(flow.flow_id);
   };
 
@@ -86,64 +81,166 @@ function Flows() {
     }
   };
 
-  const handleAddStage = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
+  const handleAddModule = async (moduleType: string): Promise<void> => {
     if (!selectedFlow) return;
 
-    const formData = new FormData(e.currentTarget);
-    const request: AddStageRequest = {
-      flow_id: selectedFlow.flow_id,
-      stage_order: parseInt(formData.get('stage_order') as string, 10),
-      stage_name: formData.get('stage_name') as string,
-      stage_type: formData.get('stage_type') as string,
-      prompt_text: formData.get('prompt_text') as string || undefined,
-      field_name: formData.get('field_name') as string || undefined,
-      field_type: formData.get('field_type') as string || undefined,
-      validation_rules: formData.get('validation_rules') as string || undefined,
-      is_required: formData.get('is_required') === 'true',
-    };
+    const nextOrder = stages.length > 0 ? Math.max(...stages.map((s) => s.stage_order)) + 1 : 1;
+
+    let request: AddStageRequest;
+    
+    switch (moduleType) {
+      case 'greeting':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'greeting',
+          stage_type: 'greeting',
+          prompt_text: 'Hola! Buenos días, ¿en qué puedo ayudarte?',
+        };
+        break;
+      case 'input_date':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_date',
+          stage_type: 'input',
+          prompt_text: 'Por favor, ingresa una fecha para la cual quieras consultar reserva',
+          field_name: 'date',
+          field_type: 'date',
+          is_required: true,
+        };
+        break;
+      case 'input_time':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_time',
+          stage_type: 'input',
+          prompt_text: '¿A qué hora prefieres?',
+          field_name: 'time',
+          field_type: 'time',
+          is_required: true,
+        };
+        break;
+      case 'input_text':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_text',
+          stage_type: 'input',
+          prompt_text: 'Por favor, proporciona la siguiente información',
+          field_name: 'text',
+          field_type: 'text',
+          is_required: true,
+        };
+        break;
+      case 'input_email':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_email',
+          stage_type: 'input',
+          prompt_text: 'Por favor, ingresa tu email',
+          field_name: 'email',
+          field_type: 'email',
+          is_required: true,
+        };
+        break;
+      case 'input_number':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_number',
+          stage_type: 'input',
+          prompt_text: 'Por favor, ingresa un número',
+          field_name: 'number',
+          field_type: 'number',
+          is_required: true,
+        };
+        break;
+      case 'confirmation':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'confirm',
+          stage_type: 'confirmation',
+          prompt_text: '¿Confirmas esta información?',
+        };
+        break;
+      default:
+        return;
+    }
 
     setLoading(true);
     setError(null);
     try {
       await addStage(request);
-      setShowAddStage(false);
+      setShowAddModule(false);
       await loadStages(selectedFlow.flow_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al agregar etapa');
+      setError(err instanceof Error ? err.message : 'Error al agregar módulo');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateStage = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    if (!editingStage) return;
-
-    const formData = new FormData(e.currentTarget);
-    const request: UpdateStageRequest = {
-      stage_id: editingStage.stage_id,
-      stage_order: formData.get('stage_order') ? parseInt(formData.get('stage_order') as string, 10) : undefined,
-      stage_name: formData.get('stage_name') as string || undefined,
-      prompt_text: formData.get('prompt_text') as string || undefined,
-      field_name: formData.get('field_name') as string || undefined,
-      field_type: formData.get('field_type') as string || undefined,
-      validation_rules: formData.get('validation_rules') as string || undefined,
-      is_required: formData.get('is_required') ? formData.get('is_required') === 'true' : undefined,
-    };
-
+  const handleUpdateStagePrompt = async (stageId: string, promptText: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      await updateStage(request);
-      setEditingStage(null);
+      await updateStage({
+        stage_id: stageId,
+        prompt_text: promptText,
+      });
       if (selectedFlow) {
         await loadStages(selectedFlow.flow_id);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar etapa');
+      setError(err instanceof Error ? err.message : 'Error al actualizar prompt');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMoveStage = async (stageId: string, direction: 'up' | 'down'): Promise<void> => {
+    const stage = stages.find((s) => s.stage_id === stageId);
+    if (!stage || !selectedFlow) return;
+
+    const sortedStages = [...stages].sort((a, b) => a.stage_order - b.stage_order);
+    const currentIndex = sortedStages.findIndex((s) => s.stage_id === stageId);
+
+    if (direction === 'up' && currentIndex > 0) {
+      const prevStage = sortedStages[currentIndex - 1];
+      const newOrder = prevStage.stage_order;
+      const prevNewOrder = stage.stage_order;
+
+      setLoading(true);
+      setError(null);
+      try {
+        await updateStage({ stage_id: stageId, stage_order: newOrder });
+        await updateStage({ stage_id: prevStage.stage_id, stage_order: prevNewOrder });
+        await loadStages(selectedFlow.flow_id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al reordenar etapa');
+      } finally {
+        setLoading(false);
+      }
+    } else if (direction === 'down' && currentIndex < sortedStages.length - 1) {
+      const nextStage = sortedStages[currentIndex + 1];
+      const newOrder = nextStage.stage_order;
+      const nextNewOrder = stage.stage_order;
+
+      setLoading(true);
+      setError(null);
+      try {
+        await updateStage({ stage_id: stageId, stage_order: newOrder });
+        await updateStage({ stage_id: nextStage.stage_id, stage_order: nextNewOrder });
+        await loadStages(selectedFlow.flow_id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al reordenar etapa');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -225,82 +322,62 @@ function Flows() {
           )}
         </div>
 
-        <div className="col-span-3 space-y-6">
+        <div className="col-span-3">
           {selectedFlow ? (
             <>
               <div className="bg-white rounded-lg shadow p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold">Editor de Flujo: {selectedFlow.name}</h2>
                   <button
-                    onClick={() => setShowAddStage(true)}
-                    className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm transition-colors"
+                    onClick={() => setShowAddModule(true)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
                   >
-                    Agregar Etapa
+                    + Agregar Módulo
                   </button>
                 </div>
-                <div className="min-h-96 border-2 border-gray-300 rounded-lg overflow-hidden">
-                  <FlowEditor
-                    stages={stages}
-                    onStageSelect={(stage) => {
-                      setSelectedStage(stage);
-                    }}
-                  />
-                </div>
-              </div>
 
-              <div className="bg-white rounded-lg shadow">
-                <div className="h-96">
-                  <PromptEditor
-                    flow={selectedFlow}
-                    stages={stages}
-                    initialPrompt={systemPrompt}
-                    onPromptChange={(prompt) => setSystemPrompt(prompt)}
-                  />
-                </div>
-              </div>
-
-              {selectedStage && (
-                <div className="bg-white rounded-lg shadow p-4">
-                  <h3 className="text-lg font-semibold mb-2">Etapa Seleccionada</h3>
-                  <div className="space-y-2">
-                    <div>
-                      <span className="font-semibold">Nombre:</span> {selectedStage.stage_name}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Tipo:</span> {selectedStage.stage_type}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Orden:</span> {selectedStage.stage_order}
-                    </div>
-                    {selectedStage.prompt_text && (
-                      <div>
-                        <span className="font-semibold">Prompt:</span> {selectedStage.prompt_text}
-                      </div>
-                    )}
-                    {selectedStage.field_name && (
-                      <div>
-                        <span className="font-semibold">Campo:</span> {selectedStage.field_name} (
-                        {selectedStage.field_type})
-                        {selectedStage.is_required && <span className="text-red-500"> *</span>}
-                      </div>
-                    )}
-                    <div className="flex gap-2 mt-4">
+                <div className="space-y-4">
+                  {stages.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <div className="text-lg mb-2">No hay módulos en este flujo</div>
+                      <div className="text-sm mb-4">Agrega módulos preformulados para definir qué información obtener del cliente</div>
                       <button
-                        onClick={() => setEditingStage(selectedStage)}
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm transition-colors"
+                        onClick={() => setShowAddModule(true)}
+                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
                       >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleDeleteStage(selectedStage.stage_id)}
-                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm transition-colors"
-                      >
-                        Eliminar
+                        Agregar Primer Módulo
                       </button>
                     </div>
-                  </div>
+                  ) : (
+                    stages
+                      .sort((a, b) => a.stage_order - b.stage_order)
+                      .map((stage, index) => (
+                        <StageModule
+                          key={stage.stage_id}
+                          stage={stage}
+                          onUpdate={handleUpdateStagePrompt}
+                          onDelete={handleDeleteStage}
+                          onMoveUp={index > 0 ? () => handleMoveStage(stage.stage_id, 'up') : undefined}
+                          onMoveDown={index < stages.length - 1 ? () => handleMoveStage(stage.stage_id, 'down') : undefined}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < stages.length - 1}
+                        />
+                      ))
+                  )}
+
+                  {showAddModule && (
+                    <AddStageModule
+                      onAddModule={(moduleType) => {
+                        if (moduleType === '') {
+                          setShowAddModule(false);
+                        } else {
+                          handleAddModule(moduleType);
+                        }
+                      }}
+                    />
+                  )}
                 </div>
-              )}
+              </div>
             </>
           ) : (
             <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
@@ -364,202 +441,6 @@ function Flows() {
         </div>
       )}
 
-      {showAddStage && selectedFlow && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold mb-4">Agregar Etapa</h2>
-            <form onSubmit={handleAddStage}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Orden</label>
-                  <input
-                    type="number"
-                    name="stage_order"
-                    required
-                    min="1"
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nombre</label>
-                  <input
-                    type="text"
-                    name="stage_name"
-                    required
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Tipo</label>
-                  <select name="stage_type" className="w-full px-3 py-2 border rounded-lg" required>
-                    <option value="greeting">Saludo</option>
-                    <option value="input">Entrada</option>
-                    <option value="confirmation">Confirmación</option>
-                    <option value="action">Acción</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Texto del Prompt</label>
-                  <textarea
-                    name="prompt_text"
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nombre del Campo</label>
-                  <input
-                    type="text"
-                    name="field_name"
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Tipo de Campo</label>
-                  <select name="field_type" className="w-full px-3 py-2 border rounded-lg">
-                    <option value="">Seleccionar...</option>
-                    <option value="text">Texto</option>
-                    <option value="date">Fecha</option>
-                    <option value="time">Hora</option>
-                    <option value="email">Email</option>
-                    <option value="number">Número</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Reglas de Validación (JSON)</label>
-                  <textarea
-                    name="validation_rules"
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" name="is_required" value="true" />
-                    <span className="text-sm">Campo requerido</span>
-                  </label>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 transition-colors"
-                >
-                  Agregar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddStage(false)}
-                  className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {editingStage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold mb-4">Editar Etapa</h2>
-            <form onSubmit={handleUpdateStage}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Orden</label>
-                  <input
-                    type="number"
-                    name="stage_order"
-                    defaultValue={editingStage.stage_order}
-                    min="1"
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nombre</label>
-                  <input
-                    type="text"
-                    name="stage_name"
-                    defaultValue={editingStage.stage_name}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Texto del Prompt</label>
-                  <textarea
-                    name="prompt_text"
-                    defaultValue={editingStage.prompt_text || ''}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nombre del Campo</label>
-                  <input
-                    type="text"
-                    name="field_name"
-                    defaultValue={editingStage.field_name || ''}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Tipo de Campo</label>
-                  <select
-                    name="field_type"
-                    defaultValue={editingStage.field_type || ''}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
-                    <option value="">Seleccionar...</option>
-                    <option value="text">Texto</option>
-                    <option value="date">Fecha</option>
-                    <option value="time">Hora</option>
-                    <option value="email">Email</option>
-                    <option value="number">Número</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Reglas de Validación (JSON)</label>
-                  <textarea
-                    name="validation_rules"
-                    defaultValue={editingStage.validation_rules || ''}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      name="is_required"
-                      value="true"
-                      defaultChecked={editingStage.is_required}
-                    />
-                    <span className="text-sm">Campo requerido</span>
-                  </label>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 transition-colors"
-                >
-                  Guardar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingStage(null)}
-                  className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
