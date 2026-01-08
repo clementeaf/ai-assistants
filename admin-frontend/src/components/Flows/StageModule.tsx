@@ -88,19 +88,19 @@ function StageModule({
             {canMoveUp && onMoveUp && (
               <button
                 onClick={onMoveUp}
-                className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded text-xs"
                 title="Mover arriba"
               >
-                ↑
+                Arriba
               </button>
             )}
             {canMoveDown && onMoveDown && (
               <button
                 onClick={onMoveDown}
-                className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded text-xs"
                 title="Mover abajo"
               >
-                ↓
+                Abajo
               </button>
             )}
             <button
@@ -109,10 +109,10 @@ function StageModule({
                   onDelete(stage.stage_id);
                 }
               }}
-              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded text-xs"
               title="Eliminar"
             >
-              ✕
+              X
             </button>
           </div>
         </div>

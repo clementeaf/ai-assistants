@@ -14,43 +14,36 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
       id: 'greeting',
       label: 'Saludo',
       description: 'Mensaje de bienvenida inicial',
-      icon: '👋',
     },
     {
       id: 'input_date',
       label: 'Solicitar Fecha',
       description: 'El asistente pedirá una fecha (formato preconfigurado)',
-      icon: '📅',
     },
     {
       id: 'input_time',
       label: 'Solicitar Hora',
       description: 'El asistente pedirá una hora (formato preconfigurado)',
-      icon: '🕐',
     },
     {
       id: 'input_text',
       label: 'Solicitar Texto',
       description: 'El asistente pedirá información en texto',
-      icon: '📝',
     },
     {
       id: 'input_email',
       label: 'Solicitar Email',
       description: 'El asistente pedirá un email (formato preconfigurado)',
-      icon: '📧',
     },
     {
       id: 'input_number',
       label: 'Solicitar Número',
       description: 'El asistente pedirá un número (formato preconfigurado)',
-      icon: '🔢',
     },
     {
       id: 'confirmation',
       label: 'Confirmación',
       description: 'El asistente pedirá confirmar antes de continuar',
-      icon: '✓',
     },
   ];
 
@@ -72,7 +65,7 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
           className="text-gray-500 hover:text-gray-700 text-xl font-bold"
           title="Cerrar"
         >
-          ×
+          X
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -82,8 +75,7 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
             onClick={() => onAddModule(module.id)}
             className="p-3 text-left border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
           >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">{module.icon}</span>
+            <div className="mb-1">
               <span className="font-semibold text-sm">{module.label}</span>
             </div>
             <div className="text-xs text-gray-600">{module.description}</div>

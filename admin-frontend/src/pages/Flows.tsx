@@ -14,6 +14,8 @@ import {
   type UpdateStageRequest,
 } from '../lib/api/flows';
 import FlowEditor from '../components/Flows/FlowEditor';
+import WhatsAppConnection from '../components/Flows/WhatsAppConnection';
+import axios from 'axios';
 
 /**
  * Página para gestionar flujos de conversación
@@ -27,6 +29,8 @@ function Flows() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateFlow, setShowCreateFlow] = useState(false);
   const [showAddModule, setShowAddModule] = useState(false);
+  const [whatsAppConnected, setWhatsAppConnected] = useState(false);
+  const [testingFlow, setTestingFlow] = useState(false);
 
   const loadFlows = async (): Promise<void> => {
     setLoading(true);
@@ -286,6 +290,51 @@ function Flows() {
     }
   };
 
+  /**
+   * Prueba el flujo seleccionado enviando un mensaje de prueba
+   */
+  const handleTestFlow = async (): Promise<void> => {
+    if (!selectedFlow) {
+      setError('Selecciona un flujo para probar');
+      return;
+    }
+
+    if (!whatsAppConnected) {
+      setError('WhatsApp no está conectado. Por favor, escanea el código QR primero.');
+      return;
+    }
+
+    setTestingFlow(true);
+    setError(null);
+
+    try {
+      // Enviar mensaje de prueba al backend
+      const testNumber = '56959263366'; // Número de prueba
+      const testMessage = 'Hola'; // Mensaje inicial para iniciar el flujo
+
+      const response = await axios.post(
+        'http://localhost:8000/v1/channels/whatsapp/inbound',
+        {
+          from_number: testNumber,
+          text: testMessage,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.response_text) {
+        alert(`Flujo iniciado correctamente!\n\nRespuesta del asistente:\n${response.data.response_text}\n\nAhora puedes enviar mensajes desde WhatsApp al número ${testNumber} para continuar probando el flujo.`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al probar el flujo. Verifica que el backend esté corriendo en http://localhost:8000');
+    } finally {
+      setTestingFlow(false);
+    }
+  };
+
   useEffect(() => {
     loadFlows();
   }, []);
@@ -296,6 +345,16 @@ function Flows() {
       <div className="flex-shrink-0 flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-gray-800">Flujos de Conversación</h1>
         <div className="flex gap-2">
+          {selectedFlow && (
+            <button
+              onClick={handleTestFlow}
+              disabled={testingFlow || !whatsAppConnected}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 transition-colors"
+              title={!whatsAppConnected ? 'Conecta WhatsApp primero para probar el flujo' : 'Probar el flujo seleccionado'}
+            >
+              {testingFlow ? 'Probando...' : 'Probar Flujo'}
+            </button>
+          )}
           <button
             onClick={() => setShowCreateFlow(true)}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
@@ -310,6 +369,11 @@ function Flows() {
             Actualizar
           </button>
         </div>
+      </div>
+
+      {/* Estado de WhatsApp */}
+      <div className="flex-shrink-0 mb-4">
+        <WhatsAppConnection onConnected={() => setWhatsAppConnected(true)} />
       </div>
 
       {error && (
@@ -360,7 +424,7 @@ function Flows() {
                         className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
                         title="Eliminar flujo"
                       >
-                        ✕
+                        X
                       </button>
                     </div>
                   </div>

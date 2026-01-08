@@ -12,6 +12,7 @@ const axios = require('axios');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const express = require('express');
+const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,6 +25,17 @@ const TEST_NUMBER = process.env.TEST_NUMBER;
 
 // Servidor web para mostrar QR
 const app = express();
+
+// CORS usando el paquete cors instalado - debe estar antes de todas las rutas
+app.use(cors({
+  origin: true, // Permitir cualquier origen
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept', 'X-Requested-With'],
+  credentials: false,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}));
+
 let currentQR = null;
 let isConnected = false;
 
@@ -92,6 +104,14 @@ function cleanMessageCache() {
 // Limpiar cache cada 5 minutos
 setInterval(cleanMessageCache, 5 * 60 * 1000);
 
+// Endpoint JSON para obtener el estado (para el frontend)
+app.get('/status', (req, res) => {
+  res.json({
+    connected: isConnected,
+    qr: currentQR ? `data:image/png;base64,${currentQR}` : null
+  });
+});
+
 // Configurar servidor web para mostrar QR
 app.get('/', (req, res) => {
   if (isConnected) {
@@ -134,7 +154,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="container">
-          <div class="status">✅ Conectado a WhatsApp</div>
+          <div class="status">Conectado a WhatsApp</div>
           <div class="info">
             <p>El servicio está conectado y funcionando correctamente.</p>
             <p>Puedes enviar mensajes de WhatsApp y serán procesados por el asistente de IA.</p>
@@ -196,7 +216,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="container">
-          <h1>🔗 Conectar WhatsApp</h1>
+          <h1>Conectar WhatsApp</h1>
           <div class="qr-container">
             <img src="data:image/png;base64,${currentQR}" alt="QR Code">
           </div>
@@ -316,12 +336,36 @@ async function connectWhatsApp() {
     if (connection === 'close') {
       isConnected = false;
       currentQR = null;
-      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      logger.info({ shouldReconnect, error: lastDisconnect?.error }, 'Conexión cerrada');
+      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      
+      logger.info({ shouldReconnect, statusCode, error: lastDisconnect?.error }, 'Conexión cerrada');
 
-      if (shouldReconnect) {
+      // Si hay error 401 (credenciales inválidas), eliminar credenciales para forzar nuevo QR
+      let forceReconnect = false;
+      if (statusCode === 401) {
+        logger.warn('Credenciales inválidas (401). Eliminando credenciales para generar nuevo QR...');
+        try {
+          const credsFiles = ['creds.json', 'app-state-sync-key.json', 'app-state-sync-version.json', 'pre-key.json', 'session.json', 'sender-key.json'];
+          credsFiles.forEach(file => {
+            const filePath = path.join(WHATSAPP_AUTH_DIR, file);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              logger.info({ file }, 'Credencial eliminada');
+            }
+          });
+          forceReconnect = true; // Forzar reconexión después de eliminar credenciales
+        } catch (error) {
+          logger.error({ error: error.message }, 'Error eliminando credenciales');
+        }
+      }
+
+      if (shouldReconnect || forceReconnect) {
         logger.info('Reconectando...');
-        connectWhatsApp();
+        // Esperar un poco antes de reconectar para que se procese la eliminación de credenciales
+        setTimeout(() => {
+          connectWhatsApp();
+        }, 2000);
       }
     } else if (connection === 'open') {
       isConnected = true;
@@ -343,14 +387,41 @@ async function connectWhatsApp() {
   // Escuchar mensajes entrantes
   sock.ev.on('messages.upsert', async (m) => {
     const messages = m.messages;
+    logger.info({ messageCount: messages.length, type: m.type }, 'Evento messages.upsert recibido');
+    
+    // Obtener nuestro número de WhatsApp
+    const ourJid = sock.user?.id || null;
+    const ourNumberFull = ourJid ? ourJid.split('@')[0] : null;
+    // Extraer solo el número sin el dispositivo (remover :64, :65, etc.)
+    const ourNumber = ourNumberFull ? ourNumberFull.split(':')[0] : null;
     
     for (const msg of messages) {
       // Solo procesar mensajes de texto nuevos (no historial)
       // También procesar mensajes con texto extendido (ephemeralMessage, viewOnceMessage, etc.)
       if (m.type === 'notify') {
-        // Ignorar mensajes propios
-        if (msg.key.fromMe) {
+        const remoteJid = msg.key.remoteJid;
+        // Extraer el número del remoteJid (remover @s.whatsapp.net, @c.us, etc.)
+        const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
+        const isToSelf = ourNumber && remoteNumber && remoteNumber === ourNumber;
+        
+        logger.info({ 
+          fromMe: msg.key.fromMe, 
+          remoteJid, 
+          ourNumber, 
+          isToSelf,
+          hasMessage: !!msg.message 
+        }, 'Procesando mensaje');
+        
+        // Ignorar mensajes propios EXCEPTO si son mensajes enviados a nuestro propio número
+        // (permite probar enviándose mensajes a uno mismo)
+        if (msg.key.fromMe && !isToSelf) {
+          logger.info({ from: remoteJid }, 'Mensaje propio ignorado (no es para nosotros)');
           continue;
+        }
+        
+        // Si es un mensaje propio pero es para nuestro número, procesarlo
+        if (msg.key.fromMe && isToSelf) {
+          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número)');
         }
 
         let text = null;
@@ -366,7 +437,10 @@ async function connectWhatsApp() {
           text = msg.message.viewOnceMessage.message.conversation;
         }
 
+        logger.info({ text, hasText: !!text, messageKeys: Object.keys(msg.message || {}) }, 'Texto extraído del mensaje');
+
         if (!text) {
+          logger.info({ remoteJid, messageType: Object.keys(msg.message || {}) }, 'Mensaje sin texto, ignorando');
           continue; // Ignorar mensajes que no son de texto
         }
 

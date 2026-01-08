@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from structlog.contextvars import bind_contextvars, clear_contextvars, get_contextvars
 
 from ai_assistants.api.models import (
@@ -51,6 +52,14 @@ def create_app() -> FastAPI:
         executor.shutdown(wait=False, cancel_futures=True)
 
     app = FastAPI(title="AI Assistants API", version="0.1.0", lifespan=_lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next: object):  # type: ignore[no-untyped-def]

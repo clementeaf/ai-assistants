@@ -37,7 +37,12 @@ def load_router_config() -> RouterConfig:
 
 def route_domain_rules(user_text: str) -> Domain:
     """Rule-based router (no external dependencies)."""
-    text = user_text.lower()
+    text = user_text.lower().strip()
+    
+    # Detectar "menu" o "menú" antes de cualquier otra cosa
+    if text == "menu" or text == "menú":
+        return "unknown"  # Ir a unknown_node para mostrar el menú
+    
     if any(word in text for word in ("reclamo", "reclamos", "devolución", "devolucion", "queja")):
         return "claims"
     if any(
@@ -62,7 +67,9 @@ def route_domain_rules(user_text: str) -> Domain:
         return "purchases"
     if any(word in text for word in ("reserva", "reservas", "turno", "agenda")):
         return "bookings"
-    return "unknown"
+    # Si no detecta palabras clave específicas, usar bookings por defecto
+    # (permite que los flujos de bookings funcionen con saludos simples como "Hola")
+    return "bookings"
 
 
 def route_domain(user_text: str) -> Domain:

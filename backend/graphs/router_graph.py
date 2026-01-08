@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
 import re
 from collections.abc import Callable
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 
+import httpx
 from langgraph.graph import END, StateGraph
 
 from ai_assistants.agents.bookings_runtime import get_bookings_planner
@@ -71,6 +74,28 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
     def _node(state: GraphState) -> GraphState:
         conversation = state["conversation"]
         user_text = state["user_text"]
+        
+        # Detectar "menu" o "menú" antes de cualquier otra cosa
+        text_lower = user_text.strip().lower()
+        if text_lower == "menu" or text_lower == "menú":
+            return {**state, "domain": "unknown"}
+        
+        # Detectar si el usuario escribió un número después de ver el menú
+        menu_flows_json = conversation.customer_memory.get("menu_flows")
+        if menu_flows_json:
+            try:
+                flows = json.loads(menu_flows_json)
+                mapped_domain = _map_number_to_domain(user_text, flows)
+                if mapped_domain:
+                    # Limpiar el menú de memoria y actualizar el dominio
+                    updated_memory = dict(conversation.customer_memory)
+                    updated_memory.pop("menu_flows", None)
+                    updated_conversation = conversation.model_copy(
+                        update={"routed_domain": mapped_domain, "customer_memory": updated_memory}
+                    )
+                    return {**state, "domain": mapped_domain, "conversation": updated_conversation}
+            except (json.JSONDecodeError, KeyError):
+                pass
         
         # Si ya hay un dominio activo y el usuario está en medio de un flujo, mantener el dominio
         if conversation.routed_domain == "bookings":
@@ -992,11 +1017,89 @@ def claims_node(state: GraphState) -> GraphState:
     return {**state, "response_text": "Entiendo. Contame el problema y, si aplica, el ID de orden (ORDER-XXX)."}
 
 
+def _get_active_flows() -> list[dict[str, Any]]:
+    """Obtiene los flujos activos desde el servidor MCP de flujos."""
+    flow_server_url = os.getenv("BOOKING_FLOW_SERVER_URL", "http://localhost:60006")
+    try:
+        client = httpx.Client(timeout=5.0)
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "list_flows",
+                "arguments": {"include_inactive": False},
+            },
+        }
+        response = client.post(f"{flow_server_url}/mcp", json=payload)
+        response.raise_for_status()
+        json_response = response.json()
+        if "error" in json_response and json_response["error"] is not None:
+            return []
+        result = json_response.get("result", {})
+        flows = result.get("flows", [])
+        return flows
+    except Exception:
+        return []
+
+
+def _show_menu(flows: list[dict[str, Any]]) -> str:
+    """Genera el texto del menú basado en los flujos activos."""
+    if not flows:
+        return "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más."
+    
+    lines = ["*Menú de opciones:*\n"]
+    for idx, flow in enumerate(flows, start=1):
+        name = flow.get("name", "Sin nombre")
+        description = flow.get("description", "")
+        if description:
+            lines.append(f"{idx}. {name} - {description}")
+        else:
+            lines.append(f"{idx}. {name}")
+    
+    lines.append("\nEscribe el *número* de la opción que deseas (ej: 1, 2, 3)")
+    return "\n".join(lines)
+
+
+def _map_number_to_domain(user_text: str, flows: list[dict[str, Any]]) -> Domain | None:
+    """Mapea un número ingresado por el usuario al dominio del flujo correspondiente."""
+    text = user_text.strip()
+    try:
+        number = int(text)
+        if 1 <= number <= len(flows):
+            flow = flows[number - 1]
+            domain = flow.get("domain", "bookings")
+            if domain in ("bookings", "purchases", "claims"):
+                return domain
+    except ValueError:
+        pass
+    return None
+
+
 def unknown_node(state: GraphState) -> GraphState:
     """Fallback handler when the domain cannot be determined."""
+    user_text = state["user_text"].strip().lower()
+    conversation = state["conversation"]
+    
+    # Detectar si el usuario escribió "menu"
+    if user_text == "menu" or user_text == "menú":
+        flows = _get_active_flows()
+        menu_text = _show_menu(flows)
+        # Guardar los flujos en memoria para poder mapear números después
+        updated_memory = dict(conversation.customer_memory)
+        updated_memory["menu_flows"] = json.dumps(flows)
+        updated_conversation = conversation.model_copy(update={"customer_memory": updated_memory})
+        return {
+            **state,
+            "conversation": updated_conversation,
+            "response_text": menu_text,
+        }
+    
+    
+    # Respuesta por defecto
     return {
         **state,
-        "response_text": "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más.",
+        "response_text": "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más.\n\nO escribe *menu* para ver todas las opciones disponibles.",
     }
 
 
