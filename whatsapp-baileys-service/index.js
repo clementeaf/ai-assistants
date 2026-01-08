@@ -61,6 +61,8 @@ app.use(cors({
 
 let currentQR = null;
 let isConnected = false;
+let conflictRetryCount = 0;
+const MAX_CONFLICT_RETRIES = 3;
 
 // Asegurar que el directorio de autenticación existe
 if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
@@ -486,8 +488,25 @@ async function connectWhatsApp() {
       
       // Si hay error 440 (conflict - otra sesión activa), eliminar credenciales y forzar nuevo QR
       if (statusCode === 440) {
-        logger.warn('⚠️  Conflicto detectado (440): Otra sesión de WhatsApp Web está activa. Eliminando credenciales para generar nuevo QR...');
-        logger.warn('💡 SOLUCIÓN: Cierra todas las sesiones de WhatsApp Web en otros dispositivos/navegadores y escanea el nuevo QR');
+        conflictRetryCount++;
+        logger.warn({ 
+          conflictRetryCount, 
+          maxRetries: MAX_CONFLICT_RETRIES 
+        }, '⚠️  Conflicto detectado (440): Otra sesión de WhatsApp Web está activa');
+        
+        if (conflictRetryCount >= MAX_CONFLICT_RETRIES) {
+          logger.error('🚫 Máximo de reintentos por conflicto alcanzado. Deteniendo reconexión automática.');
+          logger.error('💡 ACCIÓN REQUERIDA:');
+          logger.error('   1. Cierra TODAS las sesiones de WhatsApp Web en otros dispositivos/navegadores');
+          logger.error('   2. Ve a WhatsApp en tu teléfono: Configuración > Dispositivos vinculados');
+          logger.error('   3. Desvincula todas las sesiones de WhatsApp Web');
+          logger.error('   4. Reinicia este servicio manualmente');
+          return; // No reconectar más
+        }
+        
+        logger.warn('💡 SOLUCIÓN: Cierra todas las sesiones de WhatsApp Web en otros dispositivos/navegadores');
+        logger.warn(`   Reintento ${conflictRetryCount}/${MAX_CONFLICT_RETRIES} - Esperando 10 segundos antes de reconectar...`);
+        
         try {
           const credsFiles = ['creds.json', 'app-state-sync-key.json', 'app-state-sync-version.json', 'pre-key.json', 'session.json', 'sender-key.json'];
           credsFiles.forEach(file => {
@@ -501,18 +520,25 @@ async function connectWhatsApp() {
         } catch (error) {
           logger.error({ error: error.message }, 'Error eliminando credenciales por conflicto');
         }
+      } else {
+        // Si no es error 440, resetear el contador
+        conflictRetryCount = 0;
       }
 
       if (shouldReconnect || forceReconnect) {
-        logger.info('Reconectando...');
-        // Esperar un poco antes de reconectar para que se procese la eliminación de credenciales
+        // Si es un error 440, esperar más tiempo antes de reconectar
+        const delay = statusCode === 440 ? 10000 : 2000; // 10 segundos para conflictos, 2 segundos para otros
+        
+        logger.info({ delay }, 'Reconectando...');
+        // Esperar antes de reconectar para que se procese la eliminación de credenciales
         setTimeout(() => {
           connectWhatsApp();
-        }, 2000);
+        }, delay);
       }
     } else if (connection === 'open') {
       isConnected = true;
       currentQR = null;
+      conflictRetryCount = 0; // Resetear contador cuando se conecta exitosamente
       logger.info('✅ Conectado a WhatsApp Web');
       
       // NO ENVIAR MENSAJES AUTOMÁTICOS - comentado para prevenir spam
