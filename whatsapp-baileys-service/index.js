@@ -373,15 +373,15 @@ async function connectWhatsApp() {
       currentQR = null;
       logger.info('✅ Conectado a WhatsApp Web');
       
-      // Enviar mensaje de prueba si TEST_NUMBER está configurado
-      if (TEST_NUMBER) {
-        setTimeout(async () => {
-          await sendTestMessage(
-            TEST_NUMBER,
-            'Hola! Este es un mensaje de prueba del servicio de WhatsApp Baileys. El servicio está funcionando correctamente y listo para recibir mensajes.'
-          );
-        }, 3000); // Esperar 3 segundos después de conectar
-      }
+      // NO ENVIAR MENSAJES AUTOMÁTICOS - comentado para prevenir spam
+      // if (TEST_NUMBER) {
+      //   setTimeout(async () => {
+      //     await sendTestMessage(
+      //       TEST_NUMBER,
+      //       'Hola! Este es un mensaje de prueba del servicio de WhatsApp Baileys. El servicio está funcionando correctamente y listo para recibir mensajes.'
+      //     );
+      //   }, 3000);
+      // }
     }
   });
 
@@ -390,6 +390,12 @@ async function connectWhatsApp() {
     const messages = m.messages;
     logger.info({ messageCount: messages.length, type: m.type }, 'Evento messages.upsert recibido');
     
+    // CRÍTICO: Solo procesar mensajes nuevos (type 'notify'), NO historial
+    if (m.type !== 'notify') {
+      logger.debug({ type: m.type }, 'Ignorando mensajes no-notify (historial)');
+      return;
+    }
+    
     // Obtener nuestro número de WhatsApp
     const ourJid = sock.user?.id || null;
     const ourNumberFull = ourJid ? ourJid.split('@')[0] : null;
@@ -397,9 +403,6 @@ async function connectWhatsApp() {
     const ourNumber = ourNumberFull ? ourNumberFull.split(':')[0] : null;
     
     for (const msg of messages) {
-      // Solo procesar mensajes de texto nuevos (no historial)
-      // También procesar mensajes con texto extendido (ephemeralMessage, viewOnceMessage, etc.)
-      if (m.type === 'notify') {
         const remoteJid = msg.key.remoteJid;
         // Extraer el número del remoteJid (remover @s.whatsapp.net, @c.us, etc.)
         const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
@@ -417,16 +420,11 @@ async function connectWhatsApp() {
           hasMessage: !!msg.message 
         }, 'Procesando mensaje');
         
-        // Ignorar mensajes propios EXCEPTO si son mensajes enviados a nuestro propio número
-        // (permite probar enviándose mensajes a uno mismo)
-        if (msg.key.fromMe && !isToSelf) {
-          logger.info({ from: remoteJid }, 'Mensaje propio ignorado (no es para nosotros)');
+        // IGNORAR TODOS los mensajes propios (fromMe=true)
+        // Solo procesar mensajes que RECIBIMOS de otros
+        if (msg.key.fromMe) {
+          logger.debug({ from: remoteJid }, 'Mensaje propio ignorado');
           continue;
-        }
-        
-        // Si es un mensaje propio pero es para nuestro número, procesarlo
-        if (msg.key.fromMe && isToSelf) {
-          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número)');
         }
 
         let text = null;
@@ -498,14 +496,8 @@ async function connectWhatsApp() {
           }
         } catch (error) {
           logger.error({ error: error.message, stack: error.stack }, 'Error procesando mensaje');
-          // Enviar mensaje de error al usuario
-          try {
-            await sock.sendMessage(from, {
-              text: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta más tarde.',
-            });
-          } catch (sendError) {
-            logger.error({ error: sendError.message }, 'Error enviando mensaje de error');
-          }
+          // NO enviar mensaje de error automático para evitar spam
+          // Si el backend falla, simplemente loguear el error
         }
       }
     }
