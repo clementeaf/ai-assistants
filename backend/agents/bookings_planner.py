@@ -6,14 +6,12 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
+from ai_assistants.adapters.mcp_llm_adapter import MCPLLMAdapter
+from ai_assistants.adapters.mcp_llm_config import load_mcp_llm_config
+from ai_assistants.llm.chat_client import ChatClient
 from ai_assistants.llm.openai_compatible import OpenAICompatibleClient, load_openai_compatible_config
 from ai_assistants.observability.logging import get_logger
 from ai_assistants.utils.prompts import load_prompt_text
-
-
-class ChatClient(Protocol):
-    def chat_completion(self, *, system: str, user: str) -> str:  # pragma: no cover
-        ...
 
 
 ToolName = Literal[
@@ -104,6 +102,12 @@ def build_bookings_planner_from_env() -> BookingsPlanner | None:
     cfg = load_bookings_planner_config()
     if not cfg.enabled:
         return None
+
+    # Priority: MCP LLM adapter > Direct OpenAI-compatible client
+    mcp_llm_cfg = load_mcp_llm_config()
+    if mcp_llm_cfg is not None:
+        return BookingsPlanner(MCPLLMAdapter(mcp_llm_cfg.server_url, mcp_llm_cfg.api_key, mcp_llm_cfg.timeout_seconds))
+
     llm_cfg = load_openai_compatible_config()
     if llm_cfg is None:
         get_logger().warning("bookings_planner.disabled_missing_llm_config")
