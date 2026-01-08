@@ -28,8 +28,19 @@ const PORT = process.env.PORT || 60007;
 // WHITELIST: Solo números autorizados pueden interactuar con el bot
 // Format: números separados por coma sin espacios (ej: "56959263366,56912345678")
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS 
-  ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim())
+  ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()).filter(n => n.length > 0)
   : [];
+
+// SEGURIDAD: Si ALLOWED_NUMBERS está vacío, NO responder a NADIE
+if (ALLOWED_NUMBERS.length === 0) {
+  logger.warn('⚠️  ALLOWED_NUMBERS está vacío. El bot NO responderá a ningún número por seguridad.');
+}
+
+logger.info({ 
+  allowedNumbers: ALLOWED_NUMBERS,
+  count: ALLOWED_NUMBERS.length 
+}, 'Whitelist de números autorizados cargada');
+
 const TEST_NUMBER = process.env.TEST_NUMBER;
 
 // Servidor web para mostrar QR
@@ -490,11 +501,22 @@ async function connectWhatsApp() {
         }
 
         // WHITELIST: Verificar que el número esté autorizado
-        if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(fromNumber)) {
+        // SEGURIDAD CRÍTICA: Si ALLOWED_NUMBERS está vacío, NO responder a NADIE
+        if (ALLOWED_NUMBERS.length === 0) {
+          logger.warn({ 
+            fromNumber,
+            reason: 'ALLOWED_NUMBERS está vacío - Modo seguro activado'
+          }, '⚠️  Mensaje BLOQUEADO - Whitelist vacía (modo seguro)');
+          continue;
+        }
+        
+        // Verificar que el número esté en la whitelist
+        if (!ALLOWED_NUMBERS.includes(fromNumber)) {
           logger.warn({ 
             fromNumber, 
-            allowedNumbers: ALLOWED_NUMBERS 
-          }, 'Número NO autorizado - Mensaje ignorado');
+            allowedNumbers: ALLOWED_NUMBERS,
+            reason: 'Número no está en whitelist'
+          }, '🚫 Número NO autorizado - Mensaje BLOQUEADO');
           continue;
         }
 
