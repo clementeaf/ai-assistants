@@ -43,13 +43,17 @@ from ai_assistants.utils.time import utc_now
 RouterFn = Callable[[str], Domain]
 
 
-class GraphState(TypedDict):
+class GraphState(TypedDict, total=False):
     """LangGraph state container."""
 
     conversation: ConversationState
     user_text: str
     domain: Domain
     response_text: str
+    interactive_type: str | None
+    buttons: list[str] | None
+    list_title: str | None
+    list_items: list[str | dict] | None
 
 
 _ORDER_ID_PATTERN = re.compile(r"\b(ORDER-\d+)\b", flags=re.IGNORECASE)
