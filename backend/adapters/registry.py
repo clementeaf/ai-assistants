@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from ai_assistants.adapters.booking_log import BookingLogAdapter
 from ai_assistants.adapters.bookings import BookingsAdapter
 from ai_assistants.adapters.demo_bookings import DemoBookingsAdapter
 from ai_assistants.adapters.demo_purchases import DemoPurchasesAdapter
 from ai_assistants.adapters.external_hook import ExternalHookPurchasesAdapter, load_external_hook_config
+from ai_assistants.adapters.mcp_booking_log_adapter import MCPBookingLogAdapter
+from ai_assistants.adapters.mcp_booking_log_config import load_mcp_booking_log_config
 from ai_assistants.adapters.mcp_calendar_adapter import MCPCalendarAdapter
 from ai_assistants.adapters.mcp_calendar_config import load_mcp_calendar_config
 from ai_assistants.adapters.mcp_professionals_adapter import MCPProfessionalsAdapter
@@ -14,6 +17,7 @@ from ai_assistants.adapters.purchases import PurchasesAdapter
 _purchases_adapter: PurchasesAdapter | None = None
 _bookings_adapter: BookingsAdapter | None = None
 _professionals_adapter: ProfessionalsAdapter | None = None
+_booking_log_adapter: BookingLogAdapter | None = None
 
 
 def get_purchases_adapter() -> PurchasesAdapter:
@@ -90,5 +94,32 @@ def set_professionals_adapter(adapter: ProfessionalsAdapter | None) -> None:
     """Override the professionals adapter instance (used for testing/evals)."""
     global _professionals_adapter
     _professionals_adapter = adapter
+
+
+def get_booking_log_adapter() -> BookingLogAdapter:
+    """Return the configured booking log adapter instance.
+
+    Priority:
+    1. MCP Booking Log adapter (if AI_ASSISTANTS_MCP_BOOKING_LOG_URL is set)
+    2. None (no fallback demo adapter yet)
+    """
+    global _booking_log_adapter
+    if _booking_log_adapter is None:
+        mcp_config = load_mcp_booking_log_config()
+        if mcp_config is not None:
+            _booking_log_adapter = MCPBookingLogAdapter(
+                mcp_server_url=mcp_config.server_url,
+                api_key=mcp_config.api_key,
+                timeout_seconds=mcp_config.timeout_seconds,
+            )
+        else:
+            raise RuntimeError("No booking log adapter configured. Set AI_ASSISTANTS_MCP_BOOKING_LOG_URL")
+    return _booking_log_adapter
+
+
+def set_booking_log_adapter(adapter: BookingLogAdapter | None) -> None:
+    """Override the booking log adapter instance (used for testing/evals)."""
+    global _booking_log_adapter
+    _booking_log_adapter = adapter
 
 
