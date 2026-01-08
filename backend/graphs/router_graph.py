@@ -1256,8 +1256,11 @@ def _register_link_access(
     date_iso = now.strftime("%Y-%m-%d")
     time_iso = now.isoformat()
     
-    # Usar el código de activación como booking_code
-    booking_code = activation_code.upper()
+    # Generar booking_code único: código_activación + timestamp + últimos 4 dígitos del customer_id
+    import time
+    timestamp_suffix = str(int(time.time()))[-6:]  # Últimos 6 dígitos del timestamp
+    customer_suffix = customer_id[-4:] if len(customer_id) >= 4 else customer_id  # Últimos 4 dígitos del customer_id
+    booking_code = f"{activation_code.upper()}-{timestamp_suffix}-{customer_suffix}"
     
     try:
         adapter.create_booking_log(
