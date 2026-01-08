@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 Variables de entorno:
 
-- `CALENDAR_SERVER_PORT` - Puerto del servidor (default: 3000)
+- `CALENDAR_SERVER_PORT` - Puerto del servidor (default: 60000)
 - `CALENDAR_DB_PATH` - Ruta del archivo SQLite (default: calendar.db)
 
 ## Ejecución
@@ -49,17 +49,17 @@ python main.py
 
 ### Opción 3: Uvicorn directamente
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3000
+uvicorn main:app --host 0.0.0.0 --port 60000
 ```
 
-El servidor estará disponible en `http://localhost:3000`
+El servidor estará disponible en `http://localhost:60000`
 
 ## Uso
 
 El servidor expone un endpoint `/mcp` que acepta requests JSON-RPC 2.0:
 
 ```bash
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:60000/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -81,7 +81,7 @@ curl -X POST http://localhost:3000/mcp \
 ## Health Check
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:60000/health
 ```
 
 ## Pruebas
@@ -102,7 +102,7 @@ python test_mcp.py
 Para usar este servidor con el asistente, configura:
 
 ```bash
-export AI_ASSISTANTS_MCP_CALENDAR_URL=http://localhost:3000
+export AI_ASSISTANTS_MCP_CALENDAR_URL=http://localhost:60000
 ```
 
 El asistente detectará automáticamente el servidor MCP y lo usará en lugar del adapter demo.

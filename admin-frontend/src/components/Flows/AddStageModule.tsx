@@ -1,5 +1,6 @@
 interface AddStageModuleProps {
   onAddModule: (moduleType: string) => void;
+  onClose?: () => void;
 }
 
 /**
@@ -7,7 +8,7 @@ interface AddStageModuleProps {
  * @param onAddModule - Callback cuando se selecciona un tipo de módulo
  * @returns Componente AddStageModule renderizado
  */
-function AddStageModule({ onAddModule }: AddStageModuleProps) {
+function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
   const moduleTypes = [
     {
       id: 'greeting',
@@ -61,7 +62,13 @@ function AddStageModule({ onAddModule }: AddStageModuleProps) {
           <div className="text-sm text-gray-500">Selecciona el tipo de módulo que quieres agregar</div>
         </div>
         <button
-          onClick={() => onAddModule('')}
+          onClick={() => {
+            if (onClose) {
+              onClose();
+            } else {
+              onAddModule('');
+            }
+          }}
           className="text-gray-500 hover:text-gray-700 text-xl font-bold"
           title="Cerrar"
         >

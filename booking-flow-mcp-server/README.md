@@ -46,7 +46,7 @@ pip install -r requirements.txt
 
 Variables de entorno:
 
-- `BOOKING_FLOW_SERVER_PORT` - Puerto del servidor (default: 3005)
+- `BOOKING_FLOW_SERVER_PORT` - Puerto del servidor (default: 60006)
 - `BOOKING_FLOW_DB_PATH` - Ruta del archivo SQLite (default: booking_flow.db)
 
 ## Ejecución
@@ -63,10 +63,10 @@ python main.py
 
 ### Opción 3: Uvicorn directamente
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3005
+uvicorn main:app --host 0.0.0.0 --port 60006
 ```
 
-El servidor estará disponible en `http://localhost:3005`
+El servidor estará disponible en `http://localhost:60006`
 
 ## Herramientas MCP Disponibles
 
@@ -163,7 +163,7 @@ Eliminar una etapa de un flujo.
 ### Crear un flujo personalizado
 
 ```bash
-curl -X POST http://localhost:3005/mcp \
+curl -X POST http://localhost:60006/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -184,7 +184,7 @@ curl -X POST http://localhost:3005/mcp \
 
 ```bash
 # Etapa 1: Saludo
-curl -X POST http://localhost:3005/mcp \
+curl -X POST http://localhost:60006/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -203,7 +203,7 @@ curl -X POST http://localhost:3005/mcp \
   }'
 
 # Etapa 2: Obtener nombre
-curl -X POST http://localhost:3005/mcp \
+curl -X POST http://localhost:60006/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -228,7 +228,7 @@ curl -X POST http://localhost:3005/mcp \
 ### Obtener el flujo completo
 
 ```bash
-curl -X POST http://localhost:3005/mcp \
+curl -X POST http://localhost:60006/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -268,7 +268,7 @@ El backend puede consultar el flujo activo para un dominio y seguir las etapas d
 ## Health Check
 
 ```bash
-curl http://localhost:3005/health
+curl http://localhost:60006/health
 ```
 
 ## Próximas Mejoras

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const FLOW_MCP_SERVER_URL = import.meta.env.VITE_FLOW_MCP_SERVER_URL || 'http://localhost:3006';
+const FLOW_MCP_SERVER_URL = import.meta.env.VITE_FLOW_MCP_SERVER_URL || 'http://localhost:60006';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -58,7 +58,7 @@ async function callFlowMCPTool<T = unknown>(toolName: string, arguments_: Record
       if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
         throw new Error(
           `No se pudo conectar al servidor MCP de flujos en ${FLOW_MCP_SERVER_URL}. ` +
-          `Verifica que el servidor esté corriendo en el puerto 3005 (o el configurado en VITE_FLOW_MCP_SERVER_URL)`
+          `Verifica que el servidor esté corriendo en el puerto 60006 (o el configurado en VITE_FLOW_MCP_SERVER_URL)`
         );
       }
       if (error.response) {
@@ -157,6 +157,10 @@ export interface DeleteStageResponse {
   success: boolean;
 }
 
+export interface DeleteFlowResponse {
+  success: boolean;
+}
+
 /**
  * Crea un nuevo flujo de conversación
  */
@@ -209,4 +213,11 @@ export async function updateStage(request: UpdateStageRequest): Promise<UpdateSt
  */
 export async function deleteStage(stageId: string): Promise<DeleteStageResponse> {
   return callFlowMCPTool<DeleteStageResponse>('delete_stage', { stage_id: stageId });
+}
+
+/**
+ * Elimina un flujo y todas sus etapas
+ */
+export async function deleteFlow(flowId: string): Promise<DeleteFlowResponse> {
+  return callFlowMCPTool<DeleteFlowResponse>('delete_flow', { flow_id: flowId });
 }

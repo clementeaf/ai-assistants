@@ -6,18 +6,36 @@ Si ves el error `WebSocket connection to 'ws://localhost:8000/v1/ws/conversation
 
 ### 1. Verificar que el servidor backend esté corriendo
 
+El servidor backend debe estar corriendo en `http://localhost:8000`.
+
+**Verificar si está corriendo:**
 ```bash
-# Desde el directorio backend
+curl http://localhost:8000/docs
+# O verificar el puerto:
+lsof -i :8000
+```
+
+**Iniciar el servidor:**
+
+Opción 1: Desde el directorio raíz del proyecto:
+```bash
+cd /Users/clementefalcone/Desktop/personal/ai-assistants/src/ai_assistants
+source .venv/bin/activate  # Si existe
 cd backend
+export PYTHONPATH="$(pwd)/..:$PYTHONPATH"
 python run_server.py
 ```
 
-O usando el script de inicio:
+Opción 2: Usando el script de inicio:
 ```bash
+cd backend
 ./start.sh
 ```
 
-El servidor debe estar corriendo en `http://localhost:8000`
+El servidor debe estar corriendo en `http://localhost:8000` y mostrar logs como:
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
 
 ### 2. Verificar la configuración de la URL
 

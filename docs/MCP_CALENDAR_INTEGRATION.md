@@ -13,7 +13,7 @@ Para usar un servidor de calendario MCP, configura estas variables de entorno:
 
 ```bash
 # URL del servidor MCP de calendario
-AI_ASSISTANTS_MCP_CALENDAR_URL=http://localhost:3000
+AI_ASSISTANTS_MCP_CALENDAR_URL=http://localhost:60000
 
 # API Key (opcional, si el servidor requiere autenticación)
 AI_ASSISTANTS_MCP_CALENDAR_API_KEY=your-api-key

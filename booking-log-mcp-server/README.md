@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 Variables de entorno:
 
-- `BOOKING_LOG_SERVER_PORT` - Puerto del servidor (default: 3003)
+- `BOOKING_LOG_SERVER_PORT` - Puerto del servidor (default: 60003)
 - `BOOKING_LOG_DB_PATH` - Ruta del archivo SQLite (default: booking_log.db)
 
 ## Ejecución
@@ -45,10 +45,10 @@ python main.py
 
 ### Opción 3: Uvicorn directamente
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3003
+uvicorn main:app --host 0.0.0.0 --port 60003
 ```
 
-El servidor estará disponible en `http://localhost:3003`
+El servidor estará disponible en `http://localhost:60003`
 
 ## Herramientas MCP Disponibles
 
@@ -129,7 +129,7 @@ Eliminar una entrada de la bitácora.
 
 ```bash
 # Crear entrada en bitácora
-curl -X POST http://localhost:3003/mcp \
+curl -X POST http://localhost:60003/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -155,7 +155,7 @@ curl -X POST http://localhost:3003/mcp \
 ## Health Check
 
 ```bash
-curl http://localhost:3003/health
+curl http://localhost:60003/health
 ```
 
 ## Integración con Otros Servicios

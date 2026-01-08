@@ -463,6 +463,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("BOOKING_LOG_SERVER_PORT", "3003"))
+    port = int(os.getenv("BOOKING_LOG_SERVER_PORT", "60003"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

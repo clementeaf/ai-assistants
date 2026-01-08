@@ -36,7 +36,7 @@ pip install -r requirements.txt
 
 Variables de entorno:
 
-- `LLM_MCP_SERVER_PORT` - Puerto del servidor (default: 3004)
+- `LLM_MCP_SERVER_PORT` - Puerto del servidor (default: 60004)
 - `LLM_MCP_BASE_URL` - URL base de la API del LLM (default: https://api.openai.com/v1)
 - `LLM_MCP_API_KEY` - API key del proveedor LLM
 - `LLM_MCP_MODEL` - Modelo a usar (default: gpt-4o-mini)
@@ -80,10 +80,10 @@ python main.py
 
 ### Opción 3: Uvicorn directamente
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3004
+uvicorn main:app --host 0.0.0.0 --port 60004
 ```
 
-El servidor estará disponible en `http://localhost:3004` (o el puerto configurado en `LLM_MCP_SERVER_PORT`)
+El servidor estará disponible en `http://localhost:60004` (o el puerto configurado en `LLM_MCP_SERVER_PORT`)
 
 ## Herramientas MCP Disponibles
 
@@ -124,7 +124,7 @@ Realizar una completación de chat con el LLM.
 
 ```bash
 # Realizar una completación
-curl -X POST http://localhost:3004/mcp \
+curl -X POST http://localhost:60004/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -144,7 +144,7 @@ curl -X POST http://localhost:3004/mcp \
 ## Health Check
 
 ```bash
-curl http://localhost:3004/health
+curl http://localhost:60004/health
 ```
 
 Respuesta:

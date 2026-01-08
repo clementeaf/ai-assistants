@@ -230,6 +230,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("LLM_MCP_SERVER_PORT", "3004"))
+    port = int(os.getenv("LLM_MCP_SERVER_PORT", "60004"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

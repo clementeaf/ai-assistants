@@ -8,10 +8,10 @@ Para que el frontend se comunique correctamente con los servidores MCP, configur
 
 ```bash
 # Servidor MCP de Flujos (Booking Flow)
-VITE_FLOW_MCP_SERVER_URL=http://localhost:3006
+VITE_FLOW_MCP_SERVER_URL=http://localhost:60006
 
 # Servidor MCP de Calendario
-VITE_CALENDAR_MCP_SERVER_URL=http://localhost:3000
+VITE_CALENDAR_MCP_SERVER_URL=http://localhost:60000
 
 # Servidor Backend API
 VITE_API_BASE_URL=http://localhost:8000
@@ -21,11 +21,11 @@ VITE_API_BASE_URL=http://localhost:8000
 
 | Servidor | Puerto | Variable de Entorno |
 |----------|--------|---------------------|
-| Calendar MCP Server | 3000 | `CALENDAR_SERVER_PORT` |
-| Professionals MCP Server | 3002 | `PROFESSIONALS_SERVER_PORT` |
-| Booking Log MCP Server | 3003 | `BOOKING_LOG_SERVER_PORT` |
-| LLM MCP Server | 3004 | `LLM_MCP_SERVER_PORT` |
-| Booking Flow MCP Server | 3006 | `BOOKING_FLOW_SERVER_PORT` |
+| Calendar MCP Server | 60000 | `CALENDAR_SERVER_PORT` |
+| Professionals MCP Server | 60002 | `PROFESSIONALS_SERVER_PORT` |
+| Booking Log MCP Server | 60003 | `BOOKING_LOG_SERVER_PORT` |
+| LLM MCP Server | 60004 | `LLM_MCP_SERVER_PORT` |
+| Booking Flow MCP Server | 60006 | `BOOKING_FLOW_SERVER_PORT` |
 
 ## Verificar que los Servidores Estén Corriendo
 
@@ -49,10 +49,10 @@ python main.py
 
 ```bash
 # Calendar
-curl http://localhost:3000/health
+curl http://localhost:60000/health
 
 # Booking Flow
-curl http://localhost:3006/health
+curl http://localhost:60006/health
 ```
 
 ## Solución de Problemas
@@ -65,8 +65,8 @@ Este error indica que:
 3. La URL de conexión es incorrecta
 
 **Solución:**
-1. Verifica que el servidor esté corriendo: `curl http://localhost:3006/health`
-2. Verifica la variable de entorno: `VITE_FLOW_MCP_SERVER_URL=http://localhost:3006`
+1. Verifica que el servidor esté corriendo: `curl http://localhost:60006/health`
+2. Verifica la variable de entorno: `VITE_FLOW_MCP_SERVER_URL=http://localhost:60006`
 3. Reinicia el servidor de desarrollo del frontend después de cambiar variables de entorno
 
 ### Error: "ECONNREFUSED"

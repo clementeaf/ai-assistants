@@ -388,6 +388,16 @@ def delete_stage_tool(stage_id: str) -> dict:
         return {"success": cursor.rowcount > 0}
 
 
+def delete_flow_tool(flow_id: str) -> dict:
+    """Delete a flow and all its stages."""
+    with get_db() as conn:
+        # Primero eliminar todas las etapas del flujo
+        conn.execute("DELETE FROM flow_stages WHERE flow_id = ?", (flow_id,))
+        # Luego eliminar el flujo
+        cursor = conn.execute("DELETE FROM flows WHERE flow_id = ?", (flow_id,))
+        return {"success": cursor.rowcount > 0}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
@@ -460,6 +470,8 @@ async def mcp_endpoint(request: MCPRequest):
                 )
             elif tool_name == "delete_stage":
                 result = delete_stage_tool(stage_id=arguments["stage_id"])
+            elif tool_name == "delete_flow":
+                result = delete_flow_tool(flow_id=arguments["flow_id"])
             else:
                 return MCPResponse(
                     id=request.id,
@@ -493,6 +505,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("BOOKING_FLOW_SERVER_PORT", "3006"))
+    port = int(os.getenv("BOOKING_FLOW_SERVER_PORT", "60006"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const CALENDAR_MCP_SERVER_URL = import.meta.env.VITE_CALENDAR_MCP_SERVER_URL || 'http://localhost:3000';
+const CALENDAR_MCP_SERVER_URL = import.meta.env.VITE_CALENDAR_MCP_SERVER_URL || 'http://localhost:60000';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -39,17 +39,48 @@ async function callCalendarMCPTool<T = unknown>(toolName: string, arguments_: Re
     },
   };
 
-  const response = await axios.post<MCPResponse<T>>(`${CALENDAR_MCP_SERVER_URL}/mcp`, payload);
-  
-  if (response.data.error) {
-    throw new Error(response.data.error.message || 'Unknown MCP error');
-  }
+  try {
+    const response = await axios.post<MCPResponse<T>>(`${CALENDAR_MCP_SERVER_URL}/mcp`, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.data.error) {
+      throw new Error(response.data.error.message || 'Unknown MCP error');
+    }
 
-  if (!response.data.result) {
-    throw new Error('No result in MCP response');
-  }
+    if (!response.data.result) {
+      throw new Error('No result in MCP response');
+    }
 
-  return response.data.result;
+    return response.data.result;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        throw new Error(
+          `No se pudo conectar al servidor MCP de calendario en ${CALENDAR_MCP_SERVER_URL}. ` +
+          `Verifica que el servidor esté corriendo en el puerto 60000. ` +
+          `Ejecuta: cd calendar-mcp-server && python main.py`
+        );
+      }
+      if (error.response?.status === 0 || error.message.includes('CORS')) {
+        throw new Error(
+          `Error CORS: El servidor MCP de calendario no permite conexiones desde el frontend. ` +
+          `Verifica que el servidor esté corriendo y tenga CORS habilitado. ` +
+          `URL: ${CALENDAR_MCP_SERVER_URL}`
+        );
+      }
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+        throw new Error(
+          `Error del servidor MCP (${status}): ${errorData?.error?.message || error.message}`
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 export interface Booking {

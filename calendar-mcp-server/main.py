@@ -21,8 +21,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 DB_PATH = Path(os.getenv("CALENDAR_DB_PATH", "calendar.db"))
@@ -382,6 +383,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("CALENDAR_SERVER_PORT", "3000"))
+    port = int(os.getenv("CALENDAR_SERVER_PORT", "60000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

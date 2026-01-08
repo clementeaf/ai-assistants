@@ -37,7 +37,7 @@ pip install -r requirements.txt
 
 Variables de entorno:
 
-- `PROFESSIONALS_SERVER_PORT` - Puerto del servidor (default: 3002)
+- `PROFESSIONALS_SERVER_PORT` - Puerto del servidor (default: 60002)
 - `PROFESSIONALS_DB_PATH` - Ruta del archivo SQLite (default: professionals.db)
 
 ## Ejecución
@@ -54,10 +54,10 @@ python main.py
 
 ### Opción 3: Uvicorn directamente
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3002
+uvicorn main:app --host 0.0.0.0 --port 60002
 ```
 
-El servidor estará disponible en `http://localhost:3002`
+El servidor estará disponible en `http://localhost:60002`
 
 ## Herramientas MCP Disponibles
 
@@ -84,7 +84,7 @@ El servidor estará disponible en `http://localhost:3002`
 
 ```bash
 # Crear un área
-curl -X POST http://localhost:3002/mcp \
+curl -X POST http://localhost:60002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -100,7 +100,7 @@ curl -X POST http://localhost:3002/mcp \
   }'
 
 # Crear una especialidad
-curl -X POST http://localhost:3002/mcp \
+curl -X POST http://localhost:60002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -117,7 +117,7 @@ curl -X POST http://localhost:3002/mcp \
   }'
 
 # Crear un profesional
-curl -X POST http://localhost:3002/mcp \
+curl -X POST http://localhost:60002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -134,7 +134,7 @@ curl -X POST http://localhost:3002/mcp \
   }'
 
 # Asignar especialidad a profesional
-curl -X POST http://localhost:3002/mcp \
+curl -X POST http://localhost:60002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -150,7 +150,7 @@ curl -X POST http://localhost:3002/mcp \
   }'
 
 # Listar profesionales de una especialidad
-curl -X POST http://localhost:3002/mcp \
+curl -X POST http://localhost:60002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -168,7 +168,7 @@ curl -X POST http://localhost:3002/mcp \
 ## Health Check
 
 ```bash
-curl http://localhost:3002/health
+curl http://localhost:60002/health
 ```
 
 ## Integración con Sistema de Calendario

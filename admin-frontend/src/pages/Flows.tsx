@@ -6,14 +6,14 @@ import {
   addStage,
   updateStage,
   deleteStage,
+  deleteFlow,
   type Flow,
   type FlowStage,
   type CreateFlowRequest,
   type AddStageRequest,
   type UpdateStageRequest,
 } from '../lib/api/flows';
-import StageModule from '../components/Flows/StageModule';
-import AddStageModule from '../components/Flows/AddStageModule';
+import FlowEditor from '../components/Flows/FlowEditor';
 
 /**
  * Página para gestionar flujos de conversación
@@ -81,8 +81,14 @@ function Flows() {
     }
   };
 
+  const handleAddModuleClick = (): void => {
+    setShowAddModule(true);
+  };
+
   const handleAddModule = async (moduleType: string): Promise<void> => {
     if (!selectedFlow) return;
+    
+    setShowAddModule(false);
 
     const nextOrder = stages.length > 0 ? Math.max(...stages.map((s) => s.stage_order)) + 1 : 1;
 
@@ -175,7 +181,6 @@ function Flows() {
     setError(null);
     try {
       await addStage(request);
-      setShowAddModule(false);
       await loadStages(selectedFlow.flow_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al agregar módulo');
@@ -261,13 +266,34 @@ function Flows() {
     }
   };
 
+  const handleDeleteFlow = async (flowId: string, flowName: string): Promise<void> => {
+    if (!confirm(`¿Estás seguro de eliminar el flujo "${flowName}"? Esta acción eliminará el flujo y todas sus etapas.`)) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteFlow(flowId);
+      // Si el flujo eliminado era el seleccionado, limpiar la selección
+      if (selectedFlow?.flow_id === flowId) {
+        setSelectedFlow(null);
+        setStages([]);
+      }
+      await loadFlows();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al eliminar flujo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFlows();
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col h-full">
+      {/* Header fijo */}
+      <div className="flex-shrink-0 flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-gray-800">Flujos de Conversación</h1>
         <div className="flex gap-2">
           <button
@@ -287,102 +313,85 @@ function Flows() {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg">
+        <div className="flex-shrink-0 p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg mb-4">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-6">
-        <div className="col-span-1 bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-4">Flujos Disponibles</h2>
-          {loading && flows.length === 0 ? (
-            <div className="text-gray-500">Cargando...</div>
-          ) : flows.length === 0 ? (
-            <div className="text-gray-500">No hay flujos disponibles</div>
-          ) : (
-            <div className="space-y-2">
-              {flows.map((flow) => (
-                <div
-                  key={flow.flow_id}
-                  onClick={() => handleSelectFlow(flow)}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                    selectedFlow?.flow_id === flow.flow_id
-                      ? 'bg-blue-100 border-2 border-blue-500'
-                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                  }`}
-                >
-                  <div className="font-semibold text-sm">{flow.name}</div>
-                  <div className="text-xs text-gray-600">{flow.description || 'Sin descripción'}</div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {flow.domain} | {flow.is_active ? 'Activo' : 'Inactivo'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="col-span-3">
-          {selectedFlow ? (
-            <>
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold">Editor de Flujo: {selectedFlow.name}</h2>
-                  <button
-                    onClick={() => setShowAddModule(true)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+      {/* Contenido principal con altura fija */}
+      <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
+        {/* Panel izquierdo - Flujos disponibles */}
+        <div className="col-span-1 flex flex-col bg-white rounded-lg shadow">
+          <div className="flex-shrink-0 p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold">Flujos Disponibles</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            {loading && flows.length === 0 ? (
+              <div className="text-gray-500">Cargando...</div>
+            ) : flows.length === 0 ? (
+              <div className="text-gray-500">No hay flujos disponibles</div>
+            ) : (
+              <div className="space-y-2">
+                {flows.map((flow) => (
+                  <div
+                    key={flow.flow_id}
+                    className={`p-3 rounded-lg transition-colors ${
+                      selectedFlow?.flow_id === flow.flow_id
+                        ? 'bg-blue-100 border-2 border-blue-500'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                    }`}
                   >
-                    + Agregar Módulo
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {stages.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <div className="text-lg mb-2">No hay módulos en este flujo</div>
-                      <div className="text-sm mb-4">Agrega módulos preformulados para definir qué información obtener del cliente</div>
-                      <button
-                        onClick={() => setShowAddModule(true)}
-                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    <div className="flex items-start justify-between gap-2">
+                      <div
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleSelectFlow(flow)}
                       >
-                        Agregar Primer Módulo
+                        <div className="font-semibold text-sm">{flow.name}</div>
+                        <div className="text-xs text-gray-600">{flow.description || 'Sin descripción'}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {flow.domain} | {flow.is_active ? 'Activo' : 'Inactivo'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFlow(flow.flow_id, flow.name);
+                        }}
+                        className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                        title="Eliminar flujo"
+                      >
+                        ✕
                       </button>
                     </div>
-                  ) : (
-                    stages
-                      .sort((a, b) => a.stage_order - b.stage_order)
-                      .map((stage, index) => (
-                        <StageModule
-                          key={stage.stage_id}
-                          stage={stage}
-                          onUpdate={handleUpdateStagePrompt}
-                          onDelete={handleDeleteStage}
-                          onMoveUp={index > 0 ? () => handleMoveStage(stage.stage_id, 'up') : undefined}
-                          onMoveDown={index < stages.length - 1 ? () => handleMoveStage(stage.stage_id, 'down') : undefined}
-                          canMoveUp={index > 0}
-                          canMoveDown={index < stages.length - 1}
-                        />
-                      ))
-                  )}
-
-                  {showAddModule && (
-                    <AddStageModule
-                      onAddModule={(moduleType) => {
-                        if (moduleType === '') {
-                          setShowAddModule(false);
-                        } else {
-                          handleAddModule(moduleType);
-                        }
-                      }}
-                    />
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
-            </>
+            )}
+          </div>
+        </div>
+
+        {/* Panel derecho - Editor de flujo */}
+        <div className="col-span-3 flex flex-col min-h-0">
+          {selectedFlow ? (
+            <FlowEditor
+              flowName={selectedFlow.name}
+              stages={stages}
+              loading={loading}
+              onUpdateStage={handleUpdateStagePrompt}
+              onDeleteStage={handleDeleteStage}
+              onMoveStage={handleMoveStage}
+              onAddModule={(moduleType) => {
+                handleAddModule(moduleType);
+              }}
+              showAddModule={showAddModule}
+              onCloseAddModule={() => setShowAddModule(false)}
+            />
           ) : (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-              <div className="text-lg mb-2">Selecciona un flujo para comenzar</div>
-              <div className="text-sm">Elige un flujo de la lista para visualizar y editar su estructura</div>
+            <div className="flex-1 bg-white rounded-lg shadow flex items-center justify-center">
+              <div className="text-center text-gray-500">
+                <div className="text-lg mb-2">Selecciona un flujo para comenzar</div>
+                <div className="text-sm">Elige un flujo de la lista para visualizar y editar su estructura</div>
+              </div>
             </div>
           )}
         </div>
