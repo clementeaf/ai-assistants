@@ -145,6 +145,18 @@ function Flows() {
           is_required: true,
         };
         break;
+      case 'input_name':
+        request = {
+          flow_id: selectedFlow.flow_id,
+          stage_order: nextOrder,
+          stage_name: 'get_name',
+          stage_type: 'input',
+          prompt_text: 'Por favor, dime tu nombre completo.\n\nNota: El sistema obtiene automáticamente tu nombre de WhatsApp. Solo te lo pedimos si no lo encontramos cuando accediste al chatbot.',
+          field_name: 'customer_name',
+          field_type: 'text',
+          is_required: true,
+        };
+        break;
       case 'input_email':
         request = {
           flow_id: selectedFlow.flow_id,

@@ -13,7 +13,7 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
     {
       id: 'greeting',
       label: 'Saludo',
-      description: 'Mensaje de bienvenida inicial',
+      description: 'Mensaje de bienvenida inicial (el sistema obtiene el nombre automáticamente)',
     },
     {
       id: 'input_date',
@@ -29,6 +29,11 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
       id: 'input_text',
       label: 'Solicitar Texto',
       description: 'El asistente pedirá información en texto',
+    },
+    {
+      id: 'input_name',
+      label: 'Solicitar Nombre',
+      description: 'Solo se activa si el sistema no encontró el nombre de WhatsApp',
     },
     {
       id: 'input_email',

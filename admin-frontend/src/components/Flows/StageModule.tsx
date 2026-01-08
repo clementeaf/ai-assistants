@@ -48,6 +48,7 @@ function StageModule({
   const getModuleTypeLabel = (): string => {
     if (stage.stage_type === 'greeting') return 'Saludo';
     if (stage.stage_type === 'input') {
+      if (stage.field_name === 'customer_name') return 'Solicitar Nombre';
       if (stage.field_type === 'date') return 'Solicitar Fecha';
       if (stage.field_type === 'time') return 'Solicitar Hora';
       if (stage.field_type === 'email') return 'Solicitar Email';
@@ -60,6 +61,9 @@ function StageModule({
   };
 
   const getFormatInfo = (): string => {
+    if (stage.field_name === 'customer_name') {
+      return 'Nota: Solo se activa si el sistema no encontró el nombre de WhatsApp automáticamente';
+    }
     if (stage.field_type === 'date') return 'Formato: Fecha (YYYY-MM-DD)';
     if (stage.field_type === 'time') return 'Formato: Hora (HH:MM)';
     if (stage.field_type === 'email') return 'Formato: Email';
@@ -161,8 +165,13 @@ function StageModule({
               )}
             </div>
             {getFormatInfo() && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
                 {getFormatInfo()}
+              </div>
+            )}
+            {stage.stage_type === 'greeting' && (
+              <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                ℹ️ El sistema obtiene automáticamente el nombre de WhatsApp. Solo se pedirá si no se encuentra.
               </div>
             )}
           </div>
