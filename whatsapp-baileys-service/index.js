@@ -497,10 +497,16 @@ async function connectWhatsApp() {
     // Extraer solo el número sin el dispositivo (remover :64, :65, etc.)
     const ourNumber = ourNumberFull ? ourNumberFull.split(':')[0] : null;
     
+    logger.info({ ourJid, ourNumberFull, ourNumber }, 'Número del bot identificado');
+    
     for (const msg of messages) {
       const remoteJid = msg.key.remoteJid;
       // Extraer el número del remoteJid (remover @s.whatsapp.net, @c.us, etc.)
-      const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
+      let remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
+      // Si el remoteNumber tiene dispositivo (ej: 56959263366:64), extraer solo el número
+      if (remoteNumber && remoteNumber.includes(':')) {
+        remoteNumber = remoteNumber.split(':')[0];
+      }
       const isToSelf = ourNumber && remoteNumber && remoteNumber === ourNumber;
       
       // Capturar el nombre del usuario de WhatsApp (si está disponible)
@@ -509,6 +515,7 @@ async function connectWhatsApp() {
       logger.info({ 
         fromMe: msg.key.fromMe, 
         remoteJid, 
+        remoteNumber,
         ourNumber, 
         isToSelf,
         pushName,
@@ -518,14 +525,14 @@ async function connectWhatsApp() {
         // IGNORAR mensajes propios EXCEPTO si son mensajes enviados a nuestro propio número (isToSelf)
         // IMPORTANTE: Aún así, debe pasar por la whitelist
         if (msg.key.fromMe && !isToSelf) {
-          logger.debug({ from: remoteJid }, 'Mensaje propio ignorado (no es para nosotros)');
+          logger.debug({ from: remoteJid, remoteNumber, ourNumber }, 'Mensaje propio ignorado (no es para nosotros)');
           continue;
         }
         
         // Si es mensaje propio pero es para nuestro número, procesarlo
         // NOTA: Aún debe pasar por la whitelist más abajo
         if (msg.key.fromMe && isToSelf) {
-          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número) - Verificando whitelist...');
+          logger.info({ from: remoteJid, remoteNumber, ourNumber }, 'Mensaje propio recibido (enviado a nuestro número) - Verificando whitelist...');
         }
 
       let text = null;
