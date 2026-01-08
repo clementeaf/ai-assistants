@@ -626,11 +626,44 @@ def bookings_node(state: GraphState) -> GraphState:
 
     # Step 1: Saludo inicial (máximo 2 líneas) si es la primera interacción
     if _is_first_interaction(conversation):
-        greeting = "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
+        # Consultar módulos del flujo activo para obtener el saludo configurado
+        greeting_text = _get_greeting_from_flow()
+        
+        # Personalizar saludo con nombre si está disponible
+        if conversation.customer_name:
+            # Reemplazar "¿Cómo te llamas?" o similar si está en el texto
+            greeting = greeting_text.replace("¿Cómo te llamas?", "").replace("¿Cómo te llamás?", "").strip()
+            if not greeting.endswith(".") and not greeting.endswith("!"):
+                greeting += "."
+            greeting = f"¡Hola {conversation.customer_name}! {greeting}"
+        else:
+            greeting = greeting_text
         return {**state, "response_text": greeting, "conversation": conversation}
 
     # Step 2: Capturar nombre del usuario si no lo tenemos
+    # IMPORTANTE: Solo ejecutar este paso si hay un módulo get_name configurado en el flujo
+    # y si realmente no tenemos el nombre
     if conversation.customer_name is None:
+        # Obtener el módulo get_name del flujo activo (si existe)
+        get_name_stage = _get_name_stage_from_flow()
+        
+        # Si hay módulo get_name configurado, usar su prompt_text
+        if get_name_stage:
+            prompt_text = get_name_stage.get("prompt_text", "Por favor, dime tu nombre completo.")
+            # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
+            text_lower = user_text.lower()
+            if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
+                # El usuario está expresando intención de reservar, no dando su nombre
+                return {**state, "response_text": prompt_text, "conversation": conversation}
+            
+            name = _extract_name_from_text(user_text)
+            if name is not None:
+                conversation = conversation.model_copy(update={"customer_name": name})
+                response = f"Mucho gusto, {name}. ¿Qué fecha y horario te gustaría reservar?"
+                return {**state, "response_text": response, "conversation": conversation}
+            return {**state, "response_text": prompt_text, "conversation": conversation}
+        
+        # Lógica por defecto si no hay módulo configurado
         # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
         text_lower = user_text.lower()
         if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
@@ -1100,6 +1133,90 @@ def _get_active_flows() -> list[dict[str, Any]]:
         return flows
     except Exception:
         return []
+
+
+def _get_greeting_from_flow() -> str:
+    """
+    Obtiene el texto del saludo desde el flujo activo configurado.
+    @returns Texto del saludo o texto por defecto si no se encuentra
+    """
+    flows = _get_active_flows()
+    booking_flow = next((f for f in flows if f.get("domain") == "bookings" and f.get("is_active")), None)
+    
+    if not booking_flow:
+        return "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
+    
+    try:
+        flow_id = booking_flow.get("flow_id")
+        if not flow_id:
+            return "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
+        
+        flow_server_url = os.getenv("BOOKING_FLOW_SERVER_URL", "http://localhost:60006")
+        client = httpx.Client(timeout=5.0)
+        stages_response = client.post(
+            f"{flow_server_url}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "get_flow_stages", "arguments": {"flow_id": flow_id}},
+            },
+        )
+        if stages_response.status_code == 200:
+            json_response = stages_response.json()
+            if "error" not in json_response or json_response["error"] is None:
+                result = json_response.get("result", {})
+                stages = result.get("stages", [])
+                greeting_stage = next((s for s in stages if s.get("stage_type") == "greeting"), None)
+                if greeting_stage and greeting_stage.get("prompt_text"):
+                    return greeting_stage.get("prompt_text")
+    except Exception:
+        pass  # Si falla, usar el texto por defecto
+    
+    return "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
+
+
+def _get_name_stage_from_flow() -> dict[str, Any] | None:
+    """
+    Obtiene el módulo get_name (input con field_name=customer_name) del flujo activo.
+    @returns Diccionario con la información del stage o None si no existe
+    """
+    flows = _get_active_flows()
+    booking_flow = next((f for f in flows if f.get("domain") == "bookings" and f.get("is_active")), None)
+    
+    if not booking_flow:
+        return None
+    
+    try:
+        flow_id = booking_flow.get("flow_id")
+        if not flow_id:
+            return None
+        
+        flow_server_url = os.getenv("BOOKING_FLOW_SERVER_URL", "http://localhost:60006")
+        client = httpx.Client(timeout=5.0)
+        stages_response = client.post(
+            f"{flow_server_url}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "get_flow_stages", "arguments": {"flow_id": flow_id}},
+            },
+        )
+        if stages_response.status_code == 200:
+            json_response = stages_response.json()
+            if "error" not in json_response or json_response["error"] is None:
+                result = json_response.get("result", {})
+                stages = result.get("stages", [])
+                get_name_stage = next(
+                    (s for s in stages if s.get("stage_type") == "input" and s.get("field_name") == "customer_name"),
+                    None
+                )
+                return get_name_stage
+    except Exception:
+        pass
+    
+    return None
 
 
 def _register_link_access(
