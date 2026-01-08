@@ -582,6 +582,11 @@ async function connectWhatsApp() {
           logger.info({ from }, 'Mensaje de grupo ignorado');
           continue;
         }
+        
+        // Remover identificador de dispositivo si existe (ej: 56959263366:64 -> 56959263366)
+        if (fromNumber && fromNumber.includes(':')) {
+          fromNumber = fromNumber.split(':')[0];
+        }
 
         // WHITELIST: Verificar que el número esté autorizado
         // SEGURIDAD CRÍTICA: Si ALLOWED_NUMBERS está vacío, NO responder a NADIE
