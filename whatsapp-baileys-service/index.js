@@ -409,56 +409,53 @@ async function connectWhatsApp() {
     const ourNumber = ourNumberFull ? ourNumberFull.split(':')[0] : null;
     
     for (const msg of messages) {
-        const remoteJid = msg.key.remoteJid;
-        // Extraer el número del remoteJid (remover @s.whatsapp.net, @c.us, etc.)
-        const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
-        const isToSelf = ourNumber && remoteNumber && remoteNumber === ourNumber;
-        
-        // Capturar el nombre del usuario de WhatsApp (si está disponible)
-        const pushName = msg.pushName || null;
-        
-        logger.info({ 
-          fromMe: msg.key.fromMe, 
-          remoteJid, 
-          ourNumber, 
-          isToSelf,
-          pushName,
-          hasMessage: !!msg.message 
-        }, 'Procesando mensaje');
-        
-        // IGNORAR TODOS los mensajes propios (fromMe=true)
-        // Solo procesar mensajes que RECIBIMOS de otros
-        if (msg.key.fromMe) {
-          logger.debug({ from: remoteJid }, 'Mensaje propio ignorado');
-          continue;
-        }
+      const remoteJid = msg.key.remoteJid;
+      // Extraer el número del remoteJid (remover @s.whatsapp.net, @c.us, etc.)
+      const remoteNumber = remoteJid ? remoteJid.split('@')[0] : null;
+      const isToSelf = ourNumber && remoteNumber && remoteNumber === ourNumber;
+      
+      // Capturar el nombre del usuario de WhatsApp (si está disponible)
+      const pushName = msg.pushName || null;
+      
+      logger.info({ 
+        fromMe: msg.key.fromMe, 
+        remoteJid, 
+        ourNumber, 
+        isToSelf,
+        pushName,
+        hasMessage: !!msg.message 
+      }, 'Procesando mensaje');
+      
+      // IGNORAR TODOS los mensajes propios (fromMe=true)
+      // Solo procesar mensajes que RECIBIMOS de otros
+      if (msg.key.fromMe) {
+        logger.debug({ from: remoteJid }, 'Mensaje propio ignorado');
+        continue;
+      }
 
-        let text = null;
-        
-        // Extraer texto de diferentes tipos de mensajes
-        if (msg.message?.conversation) {
-          text = msg.message.conversation;
-        } else if (msg.message?.extendedTextMessage?.text) {
-          text = msg.message.extendedTextMessage.text;
-        } else if (msg.message?.ephemeralMessage?.message?.conversation) {
-          text = msg.message.ephemeralMessage.message.conversation;
-        } else if (msg.message?.viewOnceMessage?.message?.conversation) {
-          text = msg.message.viewOnceMessage.message.conversation;
-        }
+      let text = null;
+      
+      // Extraer texto de diferentes tipos de mensajes
+      if (msg.message?.conversation) {
+        text = msg.message.conversation;
+      } else if (msg.message?.extendedTextMessage?.text) {
+        text = msg.message.extendedTextMessage.text;
+      } else if (msg.message?.ephemeralMessage?.message?.conversation) {
+        text = msg.message.ephemeralMessage.message.conversation;
+      } else if (msg.message?.viewOnceMessage?.message?.conversation) {
+        text = msg.message.viewOnceMessage.message.conversation;
+      }
 
-        logger.info({ text, hasText: !!text, messageKeys: Object.keys(msg.message || {}) }, 'Texto extraído del mensaje');
+      logger.info({ text, hasText: !!text, messageKeys: Object.keys(msg.message || {}) }, 'Texto extraído del mensaje');
 
-        if (!text) {
-          logger.info({ remoteJid, messageType: Object.keys(msg.message || {}) }, 'Mensaje sin texto, ignorando');
-          continue; // Ignorar mensajes que no son de texto
-        }
+      if (!text) {
+        logger.info({ remoteJid, messageType: Object.keys(msg.message || {}) }, 'Mensaje sin texto, ignorando');
+        continue; // Ignorar mensajes que no son de texto
+      }
 
-        const from = msg.key.remoteJid;
-        const messageId = msg.key.id;
-        const timestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
-        
-        // Capturar el nombre del usuario de WhatsApp (si está disponible)
-        const pushName = msg.pushName || null;
+      const from = msg.key.remoteJid;
+      const messageId = msg.key.id;
+      const timestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
 
         // Crear ID único para el mensaje (combinar messageId + from + timestamp)
         const uniqueMessageId = `${messageId}-${from}-${timestamp}`;
@@ -509,7 +506,6 @@ async function connectWhatsApp() {
           // NO enviar mensaje de error automático para evitar spam
           // Si el backend falla, simplemente loguear el error
         }
-      }
     }
   });
 
