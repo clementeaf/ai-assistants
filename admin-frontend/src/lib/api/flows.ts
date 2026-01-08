@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const FLOW_MCP_SERVER_URL = import.meta.env.VITE_FLOW_MCP_SERVER_URL || 'http://localhost:3005';
+const FLOW_MCP_SERVER_URL = import.meta.env.VITE_FLOW_MCP_SERVER_URL || 'http://localhost:3006';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -39,17 +39,38 @@ async function callFlowMCPTool<T = unknown>(toolName: string, arguments_: Record
     },
   };
 
-  const response = await axios.post<MCPResponse<T>>(`${FLOW_MCP_SERVER_URL}/mcp`, payload);
-  
-  if (response.data.error) {
-    throw new Error(response.data.error.message || 'Unknown MCP error');
-  }
+  try {
+    const response = await axios.post<MCPResponse<T>>(`${FLOW_MCP_SERVER_URL}/mcp`, payload);
+    
+    if (response.data.error) {
+      const errorMsg = response.data.error.message || 'Unknown MCP error';
+      console.error(`MCP Error for tool "${toolName}":`, errorMsg);
+      throw new Error(`MCP Error: ${errorMsg}`);
+    }
 
-  if (!response.data.result) {
-    throw new Error('No result in MCP response');
-  }
+    if (!response.data.result) {
+      throw new Error('No result in MCP response');
+    }
 
-  return response.data.result;
+    return response.data.result;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        throw new Error(
+          `No se pudo conectar al servidor MCP de flujos en ${FLOW_MCP_SERVER_URL}. ` +
+          `Verifica que el servidor esté corriendo en el puerto 3005 (o el configurado en VITE_FLOW_MCP_SERVER_URL)`
+        );
+      }
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+        throw new Error(
+          `Error del servidor MCP (${status}): ${errorData?.error?.message || error.message}`
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 export interface Flow {

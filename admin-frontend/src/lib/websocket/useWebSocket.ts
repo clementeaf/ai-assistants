@@ -133,8 +133,10 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
       ws.onerror = (event) => {
         setIsConnecting(false);
-        setError('WebSocket connection error. Check if the server is running.');
+        const errorMessage = 'WebSocket connection error. Verifica que el servidor esté corriendo en http://localhost:8000';
+        setError(errorMessage);
         console.error('WebSocket error:', event);
+        console.error('WebSocket URL intentada:', url);
         onErrorRef.current?.(event);
       };
 

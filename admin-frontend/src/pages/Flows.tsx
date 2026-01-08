@@ -238,7 +238,7 @@ function Flows() {
                     Agregar Etapa
                   </button>
                 </div>
-                <div className="h-96 border-2 border-gray-300 rounded-lg overflow-hidden">
+                <div className="min-h-96 border-2 border-gray-300 rounded-lg overflow-hidden">
                   <FlowEditor
                     stages={stages}
                     onStageSelect={(stage) => {
