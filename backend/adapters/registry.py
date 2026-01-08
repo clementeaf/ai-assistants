@@ -6,10 +6,14 @@ from ai_assistants.adapters.demo_purchases import DemoPurchasesAdapter
 from ai_assistants.adapters.external_hook import ExternalHookPurchasesAdapter, load_external_hook_config
 from ai_assistants.adapters.mcp_calendar_adapter import MCPCalendarAdapter
 from ai_assistants.adapters.mcp_calendar_config import load_mcp_calendar_config
+from ai_assistants.adapters.mcp_professionals_adapter import MCPProfessionalsAdapter
+from ai_assistants.adapters.mcp_professionals_config import load_mcp_professionals_config
+from ai_assistants.adapters.professionals import ProfessionalsAdapter
 from ai_assistants.adapters.purchases import PurchasesAdapter
 
 _purchases_adapter: PurchasesAdapter | None = None
 _bookings_adapter: BookingsAdapter | None = None
+_professionals_adapter: ProfessionalsAdapter | None = None
 
 
 def get_purchases_adapter() -> PurchasesAdapter:
@@ -59,5 +63,32 @@ def set_bookings_adapter(adapter: BookingsAdapter | None) -> None:
     """Override the bookings adapter instance (used for testing/evals)."""
     global _bookings_adapter
     _bookings_adapter = adapter
+
+
+def get_professionals_adapter() -> ProfessionalsAdapter:
+    """Return the configured professionals adapter instance.
+
+    Priority:
+    1. MCP Professionals adapter (if AI_ASSISTANTS_MCP_PROFESSIONALS_URL is set)
+    2. None (no fallback demo adapter yet)
+    """
+    global _professionals_adapter
+    if _professionals_adapter is None:
+        mcp_config = load_mcp_professionals_config()
+        if mcp_config is not None:
+            _professionals_adapter = MCPProfessionalsAdapter(
+                mcp_server_url=mcp_config.server_url,
+                api_key=mcp_config.api_key,
+                timeout_seconds=mcp_config.timeout_seconds,
+            )
+        else:
+            raise RuntimeError("No professionals adapter configured. Set AI_ASSISTANTS_MCP_PROFESSIONALS_URL")
+    return _professionals_adapter
+
+
+def set_professionals_adapter(adapter: ProfessionalsAdapter | None) -> None:
+    """Override the professionals adapter instance (used for testing/evals)."""
+    global _professionals_adapter
+    _professionals_adapter = adapter
 
 
