@@ -80,7 +80,7 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
         if is_menu:
             # Activar menú directamente
             flows = _get_active_flows()
-            menu_text = _show_menu(flows)
+            menu_data = _show_menu(flows)
             # Guardar los flujos en memoria para poder mapear números después
             updated_memory = dict(conversation.customer_memory)
             updated_memory["menu_flows"] = json.dumps(flows)
@@ -89,7 +89,11 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
                 **state,
                 "domain": "unknown",
                 "conversation": updated_conversation,
-                "response_text": menu_text,
+                "response_text": menu_data.get("text", ""),
+                "interactive_type": menu_data.get("interactive_type"),
+                "buttons": menu_data.get("buttons"),
+                "list_title": menu_data.get("list_title"),
+                "list_items": menu_data.get("list_items"),
             }
         if flow_domain:
             # Marcar en memoria que se activó por código
@@ -1145,11 +1149,48 @@ def _detect_flow_activation_code(user_text: str) -> tuple[str | None, str | None
     return (None, None, False)
 
 
-def _show_menu(flows: list[dict[str, Any]]) -> str:
-    """Genera el texto del menú basado en los flujos activos."""
+def _show_menu(flows: list[dict[str, Any]], use_interactive: bool = True) -> dict[str, Any]:
+    """
+    Genera el menú basado en los flujos activos.
+    Retorna dict con 'text' y opcionalmente 'interactive_type', 'buttons', 'list_items'
+    """
     if not flows:
-        return "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más."
+        return {
+            "text": "¿Querés hacer una reserva, revisar una compra, o iniciar un reclamo? Contame un poco más.",
+        }
     
+    # Si hay 3 o menos flujos, usar botones interactivos
+    if use_interactive and len(flows) <= 3:
+        buttons = []
+        for flow in flows:
+            name = flow.get("name", "Sin nombre")
+            buttons.append(name)
+        
+        return {
+            "text": "*Menú de opciones:*\n\nSelecciona una opción:",
+            "interactive_type": "buttons",
+            "buttons": buttons,
+        }
+    
+    # Si hay más de 3 flujos, usar lista interactiva
+    if use_interactive and len(flows) <= 10:
+        list_items = []
+        for flow in flows:
+            name = flow.get("name", "Sin nombre")
+            description = flow.get("description", "")
+            if description:
+                list_items.append({"title": name, "description": description})
+            else:
+                list_items.append(name)
+        
+        return {
+            "text": "*Menú de opciones:*",
+            "interactive_type": "list",
+            "list_title": "Selecciona un flujo",
+            "list_items": list_items,
+        }
+    
+    # Fallback a texto simple si hay más de 10 flujos
     lines = ["*Menú de opciones:*\n"]
     for idx, flow in enumerate(flows, start=1):
         name = flow.get("name", "Sin nombre")
@@ -1160,7 +1201,9 @@ def _show_menu(flows: list[dict[str, Any]]) -> str:
             lines.append(f"{idx}. {name}")
     
     lines.append("\nEscribe el *número* de la opción que deseas (ej: 1, 2, 3)")
-    return "\n".join(lines)
+    return {
+        "text": "\n".join(lines),
+    }
 
 
 def _map_number_to_domain(user_text: str, flows: list[dict[str, Any]]) -> Domain | None:
@@ -1186,7 +1229,7 @@ def unknown_node(state: GraphState) -> GraphState:
     # Detectar si el usuario escribió "menu"
     if user_text == "menu" or user_text == "menú":
         flows = _get_active_flows()
-        menu_text = _show_menu(flows)
+        menu_data = _show_menu(flows)
         # Guardar los flujos en memoria para poder mapear números después
         updated_memory = dict(conversation.customer_memory)
         updated_memory["menu_flows"] = json.dumps(flows)
@@ -1194,7 +1237,11 @@ def unknown_node(state: GraphState) -> GraphState:
         return {
             **state,
             "conversation": updated_conversation,
-            "response_text": menu_text,
+            "response_text": menu_data.get("text", ""),
+            "interactive_type": menu_data.get("interactive_type"),
+            "buttons": menu_data.get("buttons"),
+            "list_title": menu_data.get("list_title"),
+            "list_items": menu_data.get("list_items"),
         }
     
     

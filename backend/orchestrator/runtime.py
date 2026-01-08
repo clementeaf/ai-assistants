@@ -27,6 +27,10 @@ class TurnResult:
     conversation_id: str
     response_text: str
     state: ConversationState
+    interactive_type: str | None = None
+    buttons: list[str] | None = None
+    list_title: str | None = None
+    list_items: list[str | dict] | None = None
 
 
 class Orchestrator:
@@ -83,6 +87,10 @@ class Orchestrator:
             "user_text": user_text,
             "domain": "unknown",
             "response_text": "",
+            "interactive_type": None,
+            "buttons": None,
+            "list_title": None,
+            "list_items": None,
         }
         self._logger.info("turn.start", conversation_id=conversation_id)
         final_state: GraphState = self._compiled.invoke(graph_state)
@@ -119,6 +127,14 @@ class Orchestrator:
             conversation_id=conversation_id,
             domain=final_state["domain"],
         )
-        return TurnResult(conversation_id=conversation_id, response_text=response_text, state=updated_state)
+        return TurnResult(
+            conversation_id=conversation_id,
+            response_text=response_text,
+            state=updated_state,
+            interactive_type=final_state.get("interactive_type"),
+            buttons=final_state.get("buttons"),
+            list_title=final_state.get("list_title"),
+            list_items=final_state.get("list_items"),
+        )
 
 

@@ -164,6 +164,10 @@ def create_app() -> FastAPI:
             conversation_id=result.conversation_id,
             message_id=payload.message_id,
             response_text=result.response_text,
+            interactive_type=result.interactive_type,
+            buttons=result.buttons,
+            list_title=result.list_title,
+            list_items=result.list_items,
         )
 
     def _schedule_turn_job(

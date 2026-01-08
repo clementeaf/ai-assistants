@@ -79,6 +79,10 @@ class WhatsAppGatewayInboundResponse(BaseModel):
     conversation_id: str
     message_id: str
     response_text: str
+    interactive_type: str | None = None  # 'buttons' o 'list'
+    buttons: list[str] | None = None  # Lista de textos de botones (máx 3)
+    list_title: str | None = None  # Título de la lista
+    list_items: list[str | dict] | None = None  # Items de la lista (máx 10)
 
 
 class WebSocketMessage(BaseModel):

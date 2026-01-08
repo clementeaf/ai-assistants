@@ -68,6 +68,55 @@ if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
 }
 
 /**
+ * Envía un mensaje interactivo con botones
+ */
+async function sendInteractiveButtons(sock, to, text, buttons) {
+  // Máximo 3 botones en WhatsApp
+  const buttonList = buttons.slice(0, 3).map((btn, idx) => ({
+    buttonId: `btn_${idx + 1}`,
+    buttonText: { displayText: btn.text || btn },
+    type: 1 // Tipo 1 = botón de respuesta rápida
+  }));
+
+  const message = {
+    text: text,
+    footer: '',
+    buttons: buttonList,
+    headerType: 1 // Tipo 1 = texto
+  };
+
+  await sock.sendMessage(to, {
+    text: text,
+    buttons: buttonList.map(btn => btn.buttonText.displayText),
+    title: text
+  });
+}
+
+/**
+ * Envía un mensaje interactivo con lista
+ */
+async function sendInteractiveList(sock, to, text, listTitle, listItems) {
+  // Máximo 10 items en una lista de WhatsApp
+  const items = listItems.slice(0, 10).map((item, idx) => ({
+    title: typeof item === 'string' ? item : (item.title || `Opción ${idx + 1}`),
+    description: typeof item === 'object' && item.description ? item.description : '',
+    rowId: `row_${idx + 1}`
+  }));
+
+  const sections = [{
+    title: listTitle || 'Selecciona una opción',
+    rows: items
+  }];
+
+  await sock.sendMessage(to, {
+    text: text,
+    sections: sections,
+    title: listTitle || 'Menú',
+    buttonText: 'Ver opciones'
+  });
+}
+
+/**
  * Envía un mensaje al backend Python
  */
 async function sendToBackend(fromNumber, text, messageId, timestamp, pushName = null) {
@@ -528,8 +577,18 @@ async function connectWhatsApp() {
 
           // Enviar respuesta del backend a WhatsApp
           if (response.response_text) {
-            await sock.sendMessage(from, { text: response.response_text });
-            logger.info({ to: fromNumber, text: response.response_text }, 'Respuesta enviada');
+            // Verificar si el backend quiere enviar un mensaje interactivo
+            if (response.interactive_type === 'buttons' && response.buttons) {
+              await sendInteractiveButtons(sock, from, response.response_text, response.buttons);
+              logger.info({ to: fromNumber, buttons: response.buttons.length }, 'Mensaje interactivo con botones enviado');
+            } else if (response.interactive_type === 'list' && response.list_items) {
+              await sendInteractiveList(sock, from, response.response_text, response.list_title, response.list_items);
+              logger.info({ to: fromNumber, items: response.list_items.length }, 'Mensaje interactivo con lista enviado');
+            } else {
+              // Mensaje de texto normal
+              await sock.sendMessage(from, { text: response.response_text });
+              logger.info({ to: fromNumber, text: response.response_text }, 'Respuesta enviada');
+            }
           }
         } catch (error) {
           logger.error({ error: error.message, stack: error.stack }, 'Error procesando mensaje');
