@@ -36,6 +36,16 @@ function Sidebar() {
           >
             Flujos
           </Link>
+          <Link
+            to="/calendario"
+            className={`block px-4 py-2 rounded-lg transition-colors ${
+              isActive('/calendario')
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Calendario
+          </Link>
         </nav>
       </div>
     </aside>
