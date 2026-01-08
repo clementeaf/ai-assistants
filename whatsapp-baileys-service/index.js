@@ -70,8 +70,22 @@ if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
 /**
  * Envía un mensaje interactivo con botones (máximo 3 botones)
  * Formato Baileys para botones interactivos
+ * SEGURIDAD: Esta función solo se llama después de verificar la whitelist
  */
 async function sendInteractiveButtons(sock, to, text, buttons) {
+  // Extraer número del destinatario para logging de seguridad
+  const toNumber = to ? to.replace('@s.whatsapp.net', '').replace('@c.us', '') : 'unknown';
+  
+  // Verificación adicional de seguridad (doble verificación)
+  if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(toNumber)) {
+    logger.error({ 
+      toNumber, 
+      allowedNumbers: ALLOWED_NUMBERS,
+      reason: 'Intento de enviar mensaje a número no autorizado - BLOQUEADO'
+    }, '🚫 SEGURIDAD: Intento de enviar botones a número no autorizado');
+    return; // NO ENVIAR
+  }
+  
   // Máximo 3 botones en WhatsApp
   const buttonList = buttons.slice(0, 3).map((btn, idx) => {
     const buttonText = typeof btn === 'string' ? btn : (btn.text || btn.title || `Botón ${idx + 1}`);
@@ -87,6 +101,8 @@ async function sendInteractiveButtons(sock, to, text, buttons) {
     buttons: buttonList,
     footer: ''
   });
+  
+  logger.info({ to: toNumber, buttons: buttonList.length }, '✅ Mensaje interactivo con botones enviado (número autorizado)');
 }
 
 /**
@@ -348,20 +364,16 @@ app.get('/', (req, res) => {
 
 /**
  * Envía un mensaje de prueba a un número
+ * DESHABILITADO POR SEGURIDAD - No usar esta función
  */
 async function sendTestMessage(number, message) {
-  if (!globalSock) {
-    logger.warn('Socket no está disponible aún');
-    return;
-  }
-
-  try {
-    const jid = `${number}@s.whatsapp.net`;
-    await globalSock.sendMessage(jid, { text: message });
-    logger.info({ to: number, message }, 'Mensaje de prueba enviado');
-  } catch (error) {
-    logger.error({ error: error.message, number }, 'Error enviando mensaje de prueba');
-  }
+  // FUNCIÓN DESHABILITADA POR SEGURIDAD
+  // No se permite enviar mensajes automáticos para prevenir spam
+  logger.warn({ 
+    number, 
+    reason: 'sendTestMessage está deshabilitada por seguridad' 
+  }, '⚠️  Intento de enviar mensaje de prueba bloqueado');
+  return;
 }
 
 /**
@@ -487,15 +499,16 @@ async function connectWhatsApp() {
       }, 'Procesando mensaje');
       
         // IGNORAR mensajes propios EXCEPTO si son mensajes enviados a nuestro propio número (isToSelf)
-        // Esto permite probar enviándose mensajes a uno mismo
+        // IMPORTANTE: Aún así, debe pasar por la whitelist
         if (msg.key.fromMe && !isToSelf) {
           logger.debug({ from: remoteJid }, 'Mensaje propio ignorado (no es para nosotros)');
           continue;
         }
         
         // Si es mensaje propio pero es para nuestro número, procesarlo
+        // NOTA: Aún debe pasar por la whitelist más abajo
         if (msg.key.fromMe && isToSelf) {
-          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número) - Procesando');
+          logger.info({ from: remoteJid }, 'Mensaje propio recibido (enviado a nuestro número) - Verificando whitelist...');
         }
 
       let text = null;
@@ -573,18 +586,27 @@ async function connectWhatsApp() {
           const response = await sendToBackend(fromNumber, text, messageId, timestamp, pushName);
 
           // Enviar respuesta del backend a WhatsApp
+          // SEGURIDAD: Verificar whitelist ANTES de enviar cualquier mensaje
           if (response.response_text) {
+            // Verificación adicional de seguridad antes de enviar
+            if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(fromNumber)) {
+              logger.error({ 
+                fromNumber, 
+                allowedNumbers: ALLOWED_NUMBERS,
+                reason: 'Intento de enviar respuesta a número no autorizado - BLOQUEADO'
+              }, '🚫 SEGURIDAD: Intento de enviar respuesta a número no autorizado');
+              return; // NO ENVIAR
+            }
+            
             // Verificar si el backend quiere enviar un mensaje interactivo
             if (response.interactive_type === 'buttons' && response.buttons) {
               await sendInteractiveButtons(sock, from, response.response_text, response.buttons);
-              logger.info({ to: fromNumber, buttons: response.buttons.length }, 'Mensaje interactivo con botones enviado');
             } else if (response.interactive_type === 'list' && response.list_items) {
               await sendInteractiveList(sock, from, response.response_text, response.list_title, response.list_items);
-              logger.info({ to: fromNumber, items: response.list_items.length }, 'Mensaje interactivo con lista enviado');
             } else {
               // Mensaje de texto normal
               await sock.sendMessage(from, { text: response.response_text });
-              logger.info({ to: fromNumber, text: response.response_text }, 'Respuesta enviada');
+              logger.info({ to: fromNumber, text: response.response_text }, '✅ Respuesta enviada (número autorizado)');
             }
           }
         } catch (error) {
