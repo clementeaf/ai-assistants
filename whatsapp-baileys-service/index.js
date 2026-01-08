@@ -68,27 +68,24 @@ if (!fs.existsSync(WHATSAPP_AUTH_DIR)) {
 }
 
 /**
- * Envía un mensaje interactivo con botones
+ * Envía un mensaje interactivo con botones (máximo 3 botones)
+ * Formato Baileys para botones interactivos
  */
 async function sendInteractiveButtons(sock, to, text, buttons) {
   // Máximo 3 botones en WhatsApp
-  const buttonList = buttons.slice(0, 3).map((btn, idx) => ({
-    buttonId: `btn_${idx + 1}`,
-    buttonText: { displayText: btn.text || btn },
-    type: 1 // Tipo 1 = botón de respuesta rápida
-  }));
-
-  const message = {
-    text: text,
-    footer: '',
-    buttons: buttonList,
-    headerType: 1 // Tipo 1 = texto
-  };
+  const buttonList = buttons.slice(0, 3).map((btn, idx) => {
+    const buttonText = typeof btn === 'string' ? btn : (btn.text || btn.title || `Botón ${idx + 1}`);
+    return {
+      buttonId: `btn_${idx + 1}`,
+      buttonText: { displayText: buttonText },
+      type: 1 // Tipo 1 = botón de respuesta rápida
+    };
+  });
 
   await sock.sendMessage(to, {
     text: text,
-    buttons: buttonList.map(btn => btn.buttonText.displayText),
-    title: text
+    buttons: buttonList,
+    footer: ''
   });
 }
 
