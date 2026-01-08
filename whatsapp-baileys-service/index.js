@@ -21,6 +21,12 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const API_KEY = process.env.API_KEY || process.env.AI_ASSISTANTS_API_KEY || 'dev';
 const WHATSAPP_AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || path.join(__dirname, 'auth_info');
 const PORT = process.env.PORT || 60007;
+
+// WHITELIST: Solo números autorizados pueden interactuar con el bot
+// Format: números separados por coma sin espacios (ej: "56959263366,56912345678")
+const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS 
+  ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim())
+  : [];
 const TEST_NUMBER = process.env.TEST_NUMBER;
 
 // Servidor web para mostrar QR
@@ -473,17 +479,21 @@ async function connectWhatsApp() {
         } else if (from.includes('@c.us')) {
           fromNumber = from.replace('@c.us', '');
         } else if (from.includes('@g.us')) {
-          // Es un grupo, extraer el número del remitente real
-          const participant = msg.key.participant;
-          if (participant) {
-            fromNumber = participant.replace('@s.whatsapp.net', '').replace('@c.us', '');
-          } else {
-            logger.warn({ from }, 'Mensaje de grupo sin participante, ignorando');
-            continue;
-          }
+          // IGNORAR GRUPOS COMPLETAMENTE
+          logger.info({ from }, 'Mensaje de grupo ignorado');
+          continue;
         }
 
-        logger.info({ from: fromNumber, pushName, text }, 'Mensaje recibido');
+        // WHITELIST: Verificar que el número esté autorizado
+        if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(fromNumber)) {
+          logger.warn({ 
+            fromNumber, 
+            allowedNumbers: ALLOWED_NUMBERS 
+          }, 'Número NO autorizado - Mensaje ignorado');
+          continue;
+        }
+
+        logger.info({ from: fromNumber, pushName, text, isAllowed: true }, 'Mensaje recibido de número autorizado');
 
         try {
           // Enviar al backend Python
