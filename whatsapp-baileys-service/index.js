@@ -96,13 +96,26 @@ async function sendInteractiveButtons(sock, to, text, buttons) {
     };
   });
 
-  await sock.sendMessage(to, {
-    text: text,
-    buttons: buttonList,
-    footer: ''
-  });
-  
-  logger.info({ to: toNumber, buttons: buttonList.length }, '✅ Mensaje interactivo con botones enviado (número autorizado)');
+  try {
+    // Intentar enviar con botones interactivos
+    await sock.sendMessage(to, {
+      text: text,
+      buttons: buttonList,
+      footer: ''
+    });
+    
+    logger.info({ to: toNumber, buttons: buttonList.length }, '✅ Mensaje interactivo con botones enviado (número autorizado)');
+  } catch (error) {
+    // Fallback: Si los botones interactivos fallan, enviar como texto con opciones numeradas
+    logger.warn({ error: error.message, to: toNumber }, '⚠️  Error enviando botones interactivos, usando fallback a texto');
+    
+    const fallbackText = text + '\n\n' + buttonList.map((btn, idx) => {
+      return `${idx + 1}. ${btn.buttonText.displayText}`;
+    }).join('\n') + '\n\nEscribe el número de la opción (ej: 1, 2, 3)';
+    
+    await sock.sendMessage(to, { text: fallbackText });
+    logger.info({ to: toNumber }, '✅ Mensaje de menú enviado como texto (fallback)');
+  }
 }
 
 /**
@@ -136,14 +149,29 @@ async function sendInteractiveList(sock, to, text, listTitle, listItems) {
     rows: items
   }];
 
-  await sock.sendMessage(to, {
-    text: text,
-    sections: sections,
-    title: listTitle || 'Menú',
-    buttonText: 'Ver opciones'
-  });
-  
-  logger.info({ to: toNumber, items: items.length }, '✅ Mensaje interactivo con lista enviado (número autorizado)');
+  try {
+    // Intentar enviar con lista interactiva
+    await sock.sendMessage(to, {
+      text: text,
+      sections: sections,
+      title: listTitle || 'Menú',
+      buttonText: 'Ver opciones'
+    });
+    
+    logger.info({ to: toNumber, items: items.length }, '✅ Mensaje interactivo con lista enviado (número autorizado)');
+  } catch (error) {
+    // Fallback: Si la lista interactiva falla, enviar como texto con opciones numeradas
+    logger.warn({ error: error.message, to: toNumber }, '⚠️  Error enviando lista interactiva, usando fallback a texto');
+    
+    const fallbackText = text + '\n\n' + items.map((item, idx) => {
+      const title = typeof item === 'string' ? item : item.title;
+      const desc = typeof item === 'object' && item.description ? ` - ${item.description}` : '';
+      return `${idx + 1}. ${title}${desc}`;
+    }).join('\n') + '\n\nEscribe el número de la opción (ej: 1, 2, 3)';
+    
+    await sock.sendMessage(to, { text: fallbackText });
+    logger.info({ to: toNumber }, '✅ Mensaje de menú enviado como texto (fallback)');
+  }
 }
 
 /**
