@@ -18,6 +18,9 @@ import WhatsAppConnection from '../components/Flows/WhatsAppConnection';
 import FlowLinkGenerator from '../components/Flows/FlowLinkGenerator';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+
 /**
  * Página para gestionar flujos de conversación
  * @returns Componente de gestión de flujos renderizado
@@ -326,7 +329,8 @@ function Flows() {
       const testMessage = 'Hola'; // Mensaje inicial para iniciar el flujo
 
       const response = await axios.post(
-        'http://localhost:8000/v1/channels/whatsapp/inbound',
+        `${API_BASE_URL}/v1/channels/whatsapp/inbound`,
+
         {
           from_number: testNumber,
           text: testMessage,
@@ -342,7 +346,7 @@ function Flows() {
         alert(`Flujo iniciado correctamente!\n\nRespuesta del asistente:\n${response.data.response_text}\n\nAhora puedes enviar mensajes desde WhatsApp al número ${testNumber} para continuar probando el flujo.`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al probar el flujo. Verifica que el backend esté corriendo en http://localhost:8000');
+      setError(err instanceof Error ? err.message : `Error al probar el flujo. Verifica que el backend esté corriendo en ${API_BASE_URL}`);
     } finally {
       setTestingFlow(false);
     }

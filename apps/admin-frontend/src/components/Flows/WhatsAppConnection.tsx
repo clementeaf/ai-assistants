@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const WHATSAPP_SERVICE_URL = import.meta.env.VITE_WHATSAPP_SERVICE_URL || 'http://localhost:60007';
+
+
 interface WhatsAppConnectionProps {
   onConnected?: () => void;
 }
@@ -18,14 +21,15 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
 
   const checkWhatsAppStatus = async (): Promise<void> => {
     try {
-      const response = await axios.get('http://localhost:60007/status', {
+      const response = await axios.get(`${WHATSAPP_SERVICE_URL}/status`, {
+
         headers: {
           'Accept': 'application/json',
         },
       });
-      
+
       const { connected, qr } = response.data;
-      
+
       if (connected) {
         const wasConnected = isConnected;
         setIsConnected(true);
@@ -44,7 +48,8 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
         setError(null);
       }
     } catch (err) {
-      setError('No se pudo conectar al servicio de WhatsApp. Verifica que esté corriendo en http://localhost:60007');
+      setError(`No se pudo conectar al servicio de WhatsApp. Verifica que esté corriendo en ${WHATSAPP_SERVICE_URL}`);
+
       setIsConnected(false);
       setQrUrl(null);
     } finally {

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    image: backend:latest
+    ports:
+      - "8000:8000"
+
+    environment:
+      - DATABASE_URL=postgresql://ai_assistants_admin:ycE8Zg4vRa5AbC9aoh8ZL9BJiN2tWKHSMVyrfWcOW+M=@emotioxv3-db.cupsguy6sr11.us-east-1.rds.amazonaws.com:5432/ai_assistants
+      - REDIS_URL=redis://ai-assistants-redis.ef8qtr.0001.use1.cache.amazonaws.com:6379/0
+      - WHATSAPP_SERVICE_URL=http://whatsapp-service:60007
+      - PORT=8000
+    restart: always
+
+  whatsapp-service:
+    image: whatsapp-service:latest
+    ports:
+      - "60007:60007"
+
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - PORT=60007
+      - AUTH_INFO_PATH=/app/auth_info
+    volumes:
+      - /mnt/efs/whatsapp-auth:/app/auth_info
+    restart: always
