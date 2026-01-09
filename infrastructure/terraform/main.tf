@@ -44,6 +44,17 @@ resource "aws_subnet" "public" {
   }
 }
 
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "ai-assistants-public-subnet-b"
+  }
+}
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -59,6 +70,11 @@ resource "aws_route_table" "public" {
 
 resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public_b" {
+  subnet_id      = aws_subnet.public_b.id
   route_table_id = aws_route_table.public.id
 }
 
@@ -109,32 +125,10 @@ resource "aws_security_group" "ec2" {
   }
 }
 
-# Security Group para RDS
-resource "aws_security_group" "rds" {
-  name        = "ai-assistants-rds-sg"
-  description = "Security group for RDS PostgreSQL"
-  vpc_id      = aws_vpc.main.id
+# Security Group for RDS removed. Access should be managed on the existing RDS instance.
 
-  ingress {
-    description     = "PostgreSQL"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2.id]
-  }
-
-  egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ai-assistants-rds-sg"
-  }
-}
+# The RDS instance creation has been removed to reuse an existing RDS instance.
+# New databases should be created manually or via script in the existing RDS.
 
 # Security Group para ElastiCache
 resource "aws_security_group" "redis" {
@@ -163,43 +157,7 @@ resource "aws_security_group" "redis" {
   }
 }
 
-# RDS PostgreSQL (Free Tier: db.t2.micro)
-resource "aws_db_instance" "main" {
-  identifier             = "ai-assistants-db"
-  engine                 = "postgres"
-  engine_version         = "15.4"
-  instance_class         = "db.t2.micro" # Free Tier
-  allocated_storage      = 20
-  max_allocated_storage   = 100
-  storage_type           = "gp2"
-  storage_encrypted       = false
-
-  db_name  = "ai_assistants"
-  username = var.db_username
-  password = var.db_password
-
-  vpc_security_group_ids = [aws_security_group.rds.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "mon:04:00-mon:05:00"
-
-  skip_final_snapshot = true # Cambiar a false en producción
-
-  tags = {
-    Name = "ai-assistants-db"
-  }
-}
-
-resource "aws_db_subnet_group" "main" {
-  name       = "ai-assistants-db-subnet-group"
-  subnet_ids = [aws_subnet.public.id]
-
-  tags = {
-    Name = "ai-assistants-db-subnet-group"
-  }
-}
+# RDS resources removed to reuse existing instance.
 
 # ElastiCache Redis (Free Tier: cache.t2.micro)
 resource "aws_elasticache_subnet_group" "main" {
@@ -210,7 +168,7 @@ resource "aws_elasticache_subnet_group" "main" {
 resource "aws_elasticache_cluster" "main" {
   cluster_id           = "ai-assistants-redis"
   engine               = "redis"
-  node_type            = "cache.t2.micro" # Free Tier
+  node_type            = "cache.t3.micro" # Updated from t2.micro
   num_cache_nodes      = 1
   parameter_group_name = "default.redis7"
   port                 = 6379
@@ -277,7 +235,7 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_instance" "main" {
   ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = "t2.micro" # Free Tier
+  instance_type          = "t3.micro" # Updated from t2.micro
   key_name               = var.key_pair_name
   vpc_security_group_ids = [aws_security_group.ec2.id]
   subnet_id              = aws_subnet.public.id
@@ -320,10 +278,9 @@ output "ec2_ssh_command" {
   description = "SSH command to connect to the instance"
 }
 
-output "rds_endpoint" {
-  value       = aws_db_instance.main.endpoint
-  description = "RDS PostgreSQL endpoint"
-  sensitive   = true
+output "rds_info" {
+  value       = "Using existing RDS instance in VPC vpc-094d2ec2cace1d492. Ensure Security Group allows traffic from this EC2."
+  description = "Status of RDS deployment"
 }
 
 output "redis_endpoint" {
