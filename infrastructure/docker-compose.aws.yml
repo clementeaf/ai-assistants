@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-assistants-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - AI_ASSISTANTS_DATA_DIR=/data
+      - AI_ASSISTANTS_ENABLE_LEGACY_ROUTES=0
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/ai_assistants}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - backend_data:/data
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/docs', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ai-assistants-network
+
+  whatsapp:
+    build:
+      context: ./whatsapp-baileys-service
+      dockerfile: Dockerfile
+    container_name: whatsapp-baileys-service
+    ports:
+      - "60007:60007"
+    environment:
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - API_KEY=${API_KEY:-dev}
+      - PORT=60007
+      - WHATSAPP_AUTH_DIR=/app/auth_info
+      - ALLOWED_NUMBERS=${ALLOWED_NUMBERS:-}
+    volumes:
+      - whatsapp_auth:/app/auth_info
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:60007/status', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ai-assistants-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-assistants-postgres
+    environment:
+      - POSTGRES_DB=ai_assistants
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-assistants-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-assistants-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-assistants-network
+
+  # MCP Servers (opcionales, pueden ejecutarse en el mismo servidor)
+  calendar-mcp:
+    build:
+      context: ./calendar-mcp-server
+      dockerfile: Dockerfile
+    container_name: calendar-mcp-server
+    ports:
+      - "60001:60001"
+    volumes:
+      - calendar_data:/app/data
+    restart: unless-stopped
+    networks:
+      - ai-assistants-network
+    profiles:
+      - mcp-servers
+
+  booking-log-mcp:
+    build:
+      context: ./booking-log-mcp-server
+      dockerfile: Dockerfile
+    container_name: booking-log-mcp-server
+    ports:
+      - "60002:60002"
+    volumes:
+      - booking_log_data:/app/data
+    restart: unless-stopped
+    networks:
+      - ai-assistants-network
+    profiles:
+      - mcp-servers
+
+volumes:
+  backend_data:
+  whatsapp_auth:
+  postgres_data:
+  redis_data:
+  calendar_data:
+  booking_log_data:
+
+networks:
+  ai-assistants-network:
+    driver: bridge

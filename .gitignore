@@ -15,7 +15,6 @@ downloads/
 eggs/
 .eggs/
 lib/
-!admin-frontend/src/lib/
 lib64/
 parts/
 sdist/
@@ -138,7 +137,4 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
-*.sqlite3-shm
-*.sqlite3-wal
-backend/.data/
 

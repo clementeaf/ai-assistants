@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+requests==2.32.3
+# Google Calendar API (opcional, solo necesario si se usa Google Calendar backend)
+google-api-python-client==2.152.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+# Encryption for token storage
+cryptography==42.0.5

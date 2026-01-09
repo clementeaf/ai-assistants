@@ -1,0 +1,9 @@
+# Copiar este archivo a terraform.tfvars y completar los valores
+
+aws_region    = "us-east-1"
+key_pair_name = "tu-key-pair-name"
+
+# Generar una contraseña segura para la base de datos
+# Puedes usar: openssl rand -base64 32
+db_username = "postgres"
+db_password = "tu-password-segura-aqui"
