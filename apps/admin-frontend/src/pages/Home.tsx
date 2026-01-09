@@ -2,7 +2,7 @@ import Chat from '../components/Chat/Chat';
 
 function Home() {
   return (
-    <div>
+    <div className="h-full">
       <Chat />
     </div>
   );
