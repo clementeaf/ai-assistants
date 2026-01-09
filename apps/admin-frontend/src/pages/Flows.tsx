@@ -95,13 +95,13 @@ function Flows() {
 
   const handleAddModule = async (moduleType: string): Promise<void> => {
     if (!selectedFlow) return;
-    
+
     setShowAddModule(false);
 
     const nextOrder = stages.length > 0 ? Math.max(...stages.map((s) => s.stage_order)) + 1 : 1;
 
     let request: AddStageRequest;
-    
+
     switch (moduleType) {
       case 'greeting':
         request = {
@@ -357,9 +357,9 @@ function Flows() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full gap-4">
       {/* Header fijo */}
-      <div className="flex-shrink-0 flex justify-between items-center mb-4">
+      <div className="flex-shrink-0 flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Flujos de Conversación</h1>
         <div className="flex gap-2">
           {selectedFlow && (
@@ -389,18 +389,18 @@ function Flows() {
       </div>
 
       {/* Estado de WhatsApp */}
-      <div className="flex-shrink-0 mb-4">
+      <div className="flex-shrink-0">
         <WhatsAppConnection onConnected={() => setWhatsAppConnected(true)} />
       </div>
 
       {error && (
-        <div className="flex-shrink-0 p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg mb-4">
+        <div className="flex-shrink-0 p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg">
           {error}
         </div>
       )}
 
       {/* Contenido principal con altura fija */}
-      <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
+      <div className="flex-1 min-h-0 grid grid-cols-4 gap-4">
         {/* Panel izquierdo - Flujos disponibles */}
         <div className="col-span-1 flex flex-col bg-white rounded-lg shadow">
           <div className="flex-shrink-0 p-4 border-b border-gray-200">
@@ -416,11 +416,10 @@ function Flows() {
                 {flows.map((flow) => (
                   <div
                     key={flow.flow_id}
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedFlow?.flow_id === flow.flow_id
+                    className={`p-3 rounded-lg transition-colors ${selectedFlow?.flow_id === flow.flow_id
                         ? 'bg-blue-100 border-2 border-blue-500'
                         : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div
@@ -499,14 +498,14 @@ function Flows() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Link específico del flujo */}
-                <FlowLinkGenerator 
-                  flow={selectedFlow} 
+                <FlowLinkGenerator
+                  flow={selectedFlow}
                   whatsappNumber="56959263366"
                 />
               </div>
-              
+
               {/* Editor de flujo */}
               <div className="flex-1 min-h-0">
                 <FlowEditor

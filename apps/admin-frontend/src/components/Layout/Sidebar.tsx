@@ -19,7 +19,7 @@ function Sidebar() {
   };
 
   return (
-    <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col h-full shadow-xl">
+    <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col h-full shadow-md rounded-2xl">
       {/* Branding Header */}
       <div className="p-6 border-b border-slate-800 flex items-center gap-3">
         <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">

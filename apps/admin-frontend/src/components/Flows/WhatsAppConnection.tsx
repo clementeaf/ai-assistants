@@ -73,7 +73,7 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
 
   if (loading) {
     return (
-      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="text-sm text-blue-700">Verificando conexión de WhatsApp...</div>
       </div>
     );
@@ -81,7 +81,7 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+      <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
         <div className="text-sm text-red-700">{error}</div>
         <button
           onClick={checkWhatsAppStatus}
@@ -95,7 +95,7 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
 
   if (isConnected) {
     return (
-      <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+      <div className="p-6 bg-green-50 border border-green-200 rounded-lg">
         <div className="text-sm text-green-700 font-medium">WhatsApp conectado y listo</div>
       </div>
     );
@@ -103,7 +103,7 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
 
   if (qrUrl) {
     return (
-      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="text-sm text-yellow-800 font-medium mb-2">Escanea el código QR para conectar WhatsApp</div>
         <div className="flex justify-center mb-2">
           <img src={qrUrl} alt="QR Code" className="max-w-xs border-2 border-gray-300 rounded" />
@@ -121,7 +121,7 @@ function WhatsAppConnection({ onConnected }: WhatsAppConnectionProps) {
   }
 
   return (
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+    <div className="p-6 bg-gray-50 border border-gray-200 rounded-lg">
       <div className="text-sm text-gray-700">Esperando código QR...</div>
     </div>
   );

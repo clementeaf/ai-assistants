@@ -181,7 +181,7 @@ function Calendar() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Calendario de Reservas</h1>
         <div className="flex gap-2">
@@ -248,13 +248,12 @@ function Calendar() {
           return (
             <div
               key={day.toISOString()}
-              className={`border rounded-lg p-2 min-h-32 cursor-pointer transition-colors ${
-                isSelected
+              className={`border rounded-lg p-2 min-h-32 cursor-pointer transition-colors ${isSelected
                   ? 'bg-blue-100 border-blue-500'
                   : isTodayDate
                     ? 'bg-yellow-50 border-yellow-300'
                     : 'bg-white border-gray-300 hover:bg-gray-50'
-              }`}
+                }`}
               onClick={() => handleDateClick(day)}
             >
               <div className="text-sm font-semibold mb-2">
@@ -302,11 +301,10 @@ function Calendar() {
               {availableSlots.map((slot, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg border text-center ${
-                    slot.available
+                  className={`p-3 rounded-lg border text-center ${slot.available
                       ? 'bg-green-50 border-green-300 text-green-800'
                       : 'bg-red-50 border-red-300 text-red-800'
-                  }`}
+                    }`}
                 >
                   <div className="font-semibold">
                     {format(parseISO(slot.start_time_iso), 'HH:mm')} -{' '}
