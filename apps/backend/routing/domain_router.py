@@ -12,7 +12,7 @@ from ai_assistants.llm.openai_compatible import OpenAICompatibleClient
 from ai_assistants.observability.logging import get_logger
 from ai_assistants.utils.prompts import load_prompt_text
 
-Domain = Literal["bookings", "purchases", "claims", "unknown"]
+Domain = Literal["bookings", "purchases", "claims", "autonomous", "unknown"]
 
 
 class RouterDecision(BaseModel):

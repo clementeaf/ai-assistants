@@ -37,11 +37,15 @@ from ai_assistants.tools.bookings_tools import (
 )
 from ai_assistants.tools.purchases_tools import get_order, get_tracking_status, list_orders
 from ai_assistants.routing.domain_router import Domain, route_domain
+from ai_assistants.routing.autonomous_config import load_autonomous_config
 from ai_assistants.memory.vector_runtime import get_vector_memory_tools
 from ai_assistants.utils.time import utc_now
 from ai_assistants.adapters.registry import get_booking_log_adapter
 from ai_assistants.exceptions.adapter_exceptions import AdapterError, AdapterUnavailableError
 from ai_assistants.observability.logging import get_logger
+from ai_assistants.config.llm_config import load_llm_config
+from ai_assistants.llm.openai_compatible import OpenAICompatibleConfig, OpenAICompatibleClient
+from ai_assistants.utils.prompts import load_prompt_text
 
 RouterFn = Callable[[str], Domain]
 
@@ -81,6 +85,11 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
     def _node(state: GraphState) -> GraphState:
         conversation = state["conversation"]
         user_text = state["user_text"]
+        
+        # 0. Si el modo autónomo está habilitado, siempre usar autonomous
+        autonomous_cfg = load_autonomous_config()
+        if autonomous_cfg.enabled:
+            return {**state, "domain": "autonomous", "conversation": conversation}
         
         # 1. Detectar códigos de activación de flujo o menú (FLOW_RESERVA_INIT, MENU_INIT, etc)
         flow_name, flow_domain, is_menu = _detect_flow_activation_code(user_text)
@@ -1451,6 +1460,61 @@ def _map_number_to_domain(user_text: str, flows: list[dict[str, Any]]) -> Domain
     return None
 
 
+def autonomous_node(state: GraphState) -> GraphState:
+    """Autonomous LLM-powered node that responds using conversation history."""
+    logger = get_logger()
+    conversation = state["conversation"]
+    user_text = state["user_text"]
+    cfg = load_autonomous_config()
+    
+    if not cfg.enabled:
+        logger.warning("autonomous.disabled")
+        return unknown_node(state)
+    
+    llm_cfg = load_llm_config()
+    if llm_cfg.base_url is None or llm_cfg.api_key is None or llm_cfg.model is None:
+        logger.warning("autonomous.llm.missing_config")
+        return unknown_node(state)
+    
+    try:
+        openai_cfg = OpenAICompatibleConfig(
+            base_url=llm_cfg.base_url,
+            api_key=llm_cfg.api_key,
+            model=llm_cfg.model,
+            timeout_seconds=llm_cfg.timeout_seconds,
+        )
+        client = OpenAICompatibleClient(openai_cfg)
+        system_prompt = load_prompt_text("autonomous_system.txt")
+        
+        messages = conversation.messages
+        max_history = cfg.max_history_messages
+        recent_messages = messages[-max_history:] if len(messages) > max_history else messages
+        
+        history_text = ""
+        for msg in recent_messages:
+            if msg.role == MessageRole.user:
+                history_text += f"User: {msg.text}\n"
+            elif msg.role == MessageRole.assistant:
+                history_text += f"Assistant: {msg.text}\n"
+        
+        user_prompt = history_text + f"User: {user_text}"
+        
+        response_text = client.chat_completion(system=system_prompt, user=user_prompt)
+        
+        if not response_text or response_text.strip() == "":
+            logger.warning("autonomous.empty_response")
+            return unknown_node(state)
+        
+        return {
+            **state,
+            "response_text": response_text.strip(),
+            "conversation": conversation,
+        }
+    except Exception as exc:
+        logger.warning("autonomous.error", error=str(exc))
+        return unknown_node(state)
+
+
 def unknown_node(state: GraphState) -> GraphState:
     """Fallback handler when the domain cannot be determined."""
     user_text = state["user_text"].strip().lower()
@@ -1490,6 +1554,7 @@ def build_router_graph(router_fn: RouterFn | None = None) -> StateGraph[GraphSta
     graph.add_node("purchases", purchases_node)
     graph.add_node("bookings", bookings_node)
     graph.add_node("claims", claims_node)
+    graph.add_node("autonomous", autonomous_node)
     graph.add_node("unknown", unknown_node)
 
     graph.set_entry_point("route")
@@ -1504,12 +1569,14 @@ def build_router_graph(router_fn: RouterFn | None = None) -> StateGraph[GraphSta
             "purchases": "purchases",
             "bookings": "bookings",
             "claims": "claims",
+            "autonomous": "autonomous",
             "unknown": "unknown",
         },
     )
     graph.add_edge("purchases", END)
     graph.add_edge("bookings", END)
     graph.add_edge("claims", END)
+    graph.add_edge("autonomous", END)
     graph.add_edge("unknown", END)
     return graph
 

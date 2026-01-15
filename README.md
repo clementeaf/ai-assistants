@@ -79,6 +79,8 @@ curl -X POST "http://127.0.0.1:8000/v1/conversations/demo/messages" \
 - `AI_ASSISTANTS_PURCHASES_PLANNER_ENABLED`: habilita planner LLM para el dominio `purchases` (default: 0). El LLM propone tool-calls JSON (allowlist + validación), el código ejecuta.
 - `AI_ASSISTANTS_BOOKINGS_PLANNER_ENABLED`: habilita planner LLM para el dominio `bookings` (default: 0). Similar a purchases, pero enfocado en reservas.
 - `AI_ASSISTANTS_CLAIMS_PLANNER_ENABLED`: habilita planner LLM para el dominio `claims` (default: 0). Similar a purchases, pero enfocado en reclamos.
+- `AI_ASSISTANTS_AUTONOMOUS_ENABLED`: habilita modo autónomo LLM que bypassa el routing por dominios (default: 0). Cuando está activo, todas las conversaciones se manejan directamente con LLM usando historial de conversación.
+- `AI_ASSISTANTS_AUTONOMOUS_MAX_HISTORY`: número máximo de mensajes del historial a incluir en el contexto LLM (default: 10, máximo: 50).
 
 ### Quick start (LLM + planner de compras)
 
@@ -90,8 +92,18 @@ cp examples/env.example .env
 
 2) Editá `.env` y seteá `AI_ASSISTANTS_LLM_API_KEY` (y opcionalmente modelos).
 
-3) Levantá la API y probá un mensaje ambiguo (ej: “creo que pedí algo el mes pasado…”).  
+3) Levantá la API y probá un mensaje ambiguo (ej: "creo que pedí algo el mes pasado…").  
 Con `AI_ASSISTANTS_PURCHASES_PLANNER_ENABLED=1`, el bot va a planificar tools (JSON) y ejecutar de forma tipada.
+
+### Modo Autónomo LLM
+
+Para habilitar un bot completamente autónomo que responde usando solo LLM (sin routing por dominios):
+
+1) Seteá `AI_ASSISTANTS_AUTONOMOUS_ENABLED=1` en tu `.env`
+2) Asegurate de tener configurado `AI_ASSISTANTS_LLM_BASE_URL`, `AI_ASSISTANTS_LLM_API_KEY` y `AI_ASSISTANTS_LLM_MODEL`
+3) El bot usará el historial de conversación (últimos N mensajes según `AI_ASSISTANTS_AUTONOMOUS_MAX_HISTORY`) para generar respuestas contextuales
+
+**Nota**: Cuando el modo autónomo está habilitado, bypassa completamente el routing por dominios (purchases, bookings, claims). Todas las conversaciones se manejan directamente con LLM.
 
 ## Memoria vectorial (RAG-like)
 
