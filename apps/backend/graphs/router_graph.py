@@ -13,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from ai_assistants.agents.bookings_runtime import get_bookings_planner
 from ai_assistants.agents.claims_runtime import get_claims_planner
 from ai_assistants.agents.purchases_runtime import get_purchases_planner
+from ai_assistants.agents.autonomous_runtime import get_autonomous_planner
 from ai_assistants.orchestrator.state import ConversationState, MessageRole
 from ai_assistants.tools.contracts import (
     CheckAvailabilityInput,
@@ -593,13 +594,47 @@ def _is_first_interaction(conversation: ConversationState) -> bool:
 def _extract_name_from_text(text: str) -> str | None:
     """Extract a name from user text (simple heuristic)."""
     text = text.strip()
-    if len(text) < 2 or len(text) > 50:
+    if len(text) < 2 or len(text) > 100:
         return None
+    
+    # Palabras comunes que NO son nombres
+    common_words = {"hola", "hi", "hello", "buenos", "dias", "días", "tardes", "noches", "gracias", "thanks", "ok", "okay", "si", "sí", "no", "quiero", "hacer", "una", "reserva"}
+    text_lower = text.lower().strip()
+    
+    # Si el texto completo es solo una palabra común, no es un nombre
+    if text_lower in common_words:
+        return None
+    
+    # Patrones comunes para introducir nombre
+    import re
+    patterns = [
+        r"(?:me\s+llamo|soy|mi\s+nombre\s+es|me\s+llaman)\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+){0,2})",
+        r"^hola,?\s+me\s+llamo\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+){0,2})",
+        r"^soy\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+){0,2})",
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            # Filtrar palabras comunes
+            name_words = name.lower().split()
+            if any(word in common_words for word in name_words):
+                continue
+            if 2 <= len(name) <= 50:
+                words = name.split()
+                if 1 <= len(words) <= 3:
+                    return " ".join(word.capitalize() for word in words)
+    
+    # Fallback: si el texto es corto y parece un nombre directo (pero no palabras comunes)
     words = text.split()
-    if len(words) == 1:
-        return words[0].title()
-    if len(words) <= 3:
-        return " ".join(word.title() for word in words)
+    if len(words) == 1 and 2 <= len(words[0]) <= 20:
+        if words[0].lower() not in common_words:
+            return words[0].capitalize()
+    if 2 <= len(words) <= 3 and all(2 <= len(w) <= 20 for w in words):
+        if not any(w.lower() in common_words for w in words):
+            return " ".join(word.capitalize() for word in words)
+    
     return None
 
 
@@ -1461,58 +1496,375 @@ def _map_number_to_domain(user_text: str, flows: list[dict[str, Any]]) -> Domain
 
 
 def autonomous_node(state: GraphState) -> GraphState:
-    """Autonomous LLM-powered node that responds using conversation history."""
+    """Autonomous LLM-powered node using planner pattern with tool execution."""
     logger = get_logger()
+    conversation_id = state["conversation"].conversation_id
+    customer_id = state["conversation"].customer_id or _infer_customer_id(conversation_id)
     conversation = state["conversation"]
-    user_text = state["user_text"]
+    user_text = state["user_text"].strip()
     cfg = load_autonomous_config()
-    
+
     if not cfg.enabled:
         logger.warning("autonomous.disabled")
         return unknown_node(state)
-    
-    llm_cfg = load_llm_config()
-    if llm_cfg.base_url is None or llm_cfg.api_key is None or llm_cfg.model is None:
-        logger.warning("autonomous.llm.missing_config")
+
+    planner = get_autonomous_planner()
+    if planner is None:
+        logger.warning("autonomous.planner.not_available")
         return unknown_node(state)
+
+    # Step 1: Saludo inicial con nombre si está disponible
+    if _is_first_interaction(conversation):
+        if conversation.customer_name:
+            greeting = f"¡Hola {conversation.customer_name}! Soy tu asistente de reservas. ¿En qué puedo ayudarte hoy?"
+        else:
+            greeting = "¡Hola! Soy tu asistente de reservas. ¿Cómo te llamás?"
+        return {**state, "response_text": greeting, "conversation": conversation}
+
+    # Step 2: Capturar nombre del usuario si no lo tenemos o si se proporciona un nuevo nombre
+    # Intentar extraer nombre del texto
+    name = _extract_name_from_text(user_text)
     
-    try:
-        openai_cfg = OpenAICompatibleConfig(
-            base_url=llm_cfg.base_url,
-            api_key=llm_cfg.api_key,
-            model=llm_cfg.model,
-            timeout_seconds=llm_cfg.timeout_seconds,
-        )
-        client = OpenAICompatibleClient(openai_cfg)
-        system_prompt = load_prompt_text("autonomous_system.txt")
-        
-        messages = conversation.messages
-        max_history = cfg.max_history_messages
-        recent_messages = messages[-max_history:] if len(messages) > max_history else messages
-        
-        history_text = ""
-        for msg in recent_messages:
-            if msg.role == MessageRole.user:
-                history_text += f"User: {msg.text}\n"
-            elif msg.role == MessageRole.assistant:
-                history_text += f"Assistant: {msg.text}\n"
-        
-        user_prompt = history_text + f"User: {user_text}"
-        
-        response_text = client.chat_completion(system=system_prompt, user=user_prompt)
-        
-        if not response_text or response_text.strip() == "":
-            logger.warning("autonomous.empty_response")
-            return unknown_node(state)
-        
-        return {
-            **state,
-            "response_text": response_text.strip(),
-            "conversation": conversation,
-        }
-    except Exception as exc:
-        logger.warning("autonomous.error", error=str(exc))
-        return unknown_node(state)
+    # Si no tenemos nombre y se extrajo uno válido, guardarlo
+    if conversation.customer_name is None:
+        if name is not None:
+            conversation = conversation.model_copy(update={"customer_name": name})
+            response = f"Mucho gusto, {name}. ¿En qué puedo ayudarte hoy?"
+            return {**state, "response_text": response, "conversation": conversation}
+        # Si el texto es solo un saludo común, no pedir nombre todavía
+        text_lower = user_text.lower().strip()
+        if text_lower in {"hola", "hi", "hello", "buenos días", "buenos dias", "buenas tardes", "buenas noches"}:
+            response = "¡Hola! Soy tu asistente de reservas. ¿Cómo te llamás?"
+            return {**state, "response_text": response, "conversation": conversation}
+        response = "Por favor, decime tu nombre para continuar."
+        return {**state, "response_text": response, "conversation": conversation}
+    
+    # Si ya tenemos nombre pero se proporciona uno nuevo, actualizarlo
+    if name is not None and name.lower() != conversation.customer_name.lower():
+        conversation = conversation.model_copy(update={"customer_name": name})
+        # Continuar con el flujo normal (no retornar aquí, dejar que el planner procese)
+
+    # Step 3: Extraer fecha del texto si está presente (antes de llamar al planner)
+    # Esto ayuda al planner a tener contexto de la fecha mencionada
+    import re
+    from datetime import datetime
+    date_patterns = [
+        r"(?:para\s+el|el|día)\s+(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
+        r"(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
+    ]
+    months = {
+        "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06",
+        "julio": "07", "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
+    }
+    extracted_date = None
+    user_mentions_date = False
+    for pattern in date_patterns:
+        match = re.search(pattern, user_text.lower())
+        if match:
+            day = match.group(1).zfill(2)
+            month_name = match.group(2).lower()
+            if month_name in months:
+                current_year = datetime.now().year
+                extracted_date = f"{current_year}-{months[month_name]}-{day}"
+                user_mentions_date = True
+                # Guardar la fecha en la conversación si no está ya guardada
+                if conversation.requested_booking_date != extracted_date:
+                    conversation = conversation.model_copy(update={"requested_booking_date": extracted_date})
+                break
+    
+    # Detectar si el usuario está preguntando sobre disponibilidad/horarios
+    availability_keywords = ["horarios", "disponibilidad", "disponible", "slots", "turnos", "agenda", "qué horas", "qué horarios"]
+    user_asks_availability = any(keyword in user_text.lower() for keyword in availability_keywords)
+    
+    # Solo usar fecha guardada si:
+    # 1. El usuario menciona una fecha en su mensaje actual, O
+    # 2. El usuario está preguntando explícitamente sobre disponibilidad/horarios
+    date_to_pass = None
+    if user_mentions_date:
+        date_to_pass = extracted_date or conversation.requested_booking_date
+    elif user_asks_availability and conversation.requested_booking_date:
+        date_to_pass = conversation.requested_booking_date
+    # Si no se cumple ninguna condición, no pasar fecha (date_to_pass = None)
+
+    # Step 4: Usar planner para generar plan
+    plan = planner.plan(
+        user_text=user_text,
+        customer_id=customer_id,
+        customer_name=conversation.customer_name,
+        requested_booking_date=date_to_pass,
+        requested_booking_start_time=conversation.requested_booking_start_time if user_mentions_date or user_asks_availability else None,
+        requested_booking_end_time=conversation.requested_booking_end_time if user_mentions_date or user_asks_availability else None,
+    )
+
+    if plan is None or not plan.actions:
+        logger.warning("autonomous.planner.no_plan")
+        return {**state, "response_text": "No pude entender tu solicitud. ¿Podrías reformularla?", "conversation": conversation}
+
+    # Step 5: Ejecutar acciones del plan
+    for action in plan.actions:
+        if action.type == "ask_user":
+            return {**state, "response_text": action.text, "conversation": conversation}
+
+        if action.type == "tool_call":
+            # Guardar fecha si está en los args antes de ejecutar
+            if "date_iso" in action.args and isinstance(action.args["date_iso"], str):
+                date_iso_from_args = action.args["date_iso"].strip()
+                if date_iso_from_args and conversation.requested_booking_date != date_iso_from_args:
+                    conversation = conversation.model_copy(update={"requested_booking_date": date_iso_from_args})
+            
+            # Ejecutar función según el tool
+            if action.tool == "get_available_slots":
+                date_iso = action.args.get("date_iso") or conversation.requested_booking_date or extracted_date
+                if not isinstance(date_iso, str) or date_iso.strip() == "":
+                    return {
+                        **state,
+                        "response_text": "Necesito la fecha para consultar disponibilidad. ¿Qué fecha te interesa?",
+                        "conversation": conversation,
+                    }
+                slots_out = get_available_slots(GetAvailableSlotsInput(date_iso=date_iso))
+                if slots_out.error_code is not None:
+                    return {
+                        **state,
+                        "response_text": "No pude consultar la disponibilidad en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                if len(slots_out.slots) == 0:
+                    return {
+                        **state,
+                        "response_text": f"No hay horarios disponibles para el {date_iso}. ¿Querés consultar otra fecha?",
+                        "conversation": conversation,
+                    }
+                lines = [f"Horarios disponibles para el {date_iso}:"]
+                for slot in slots_out.slots[:10]:
+                    start = slot.start_time_iso.split("T")[1].split(":")[:2]
+                    end = slot.end_time_iso.split("T")[1].split(":")[:2]
+                    lines.append(f"- {':'.join(start)} a {':'.join(end)}")
+                conversation = conversation.model_copy(update={"requested_booking_date": date_iso})
+                return {**state, "response_text": "\n".join(lines), "conversation": conversation}
+
+            if action.tool == "check_availability":
+                date_iso = action.args.get("date_iso")
+                start_time_iso = action.args.get("start_time_iso")
+                end_time_iso = action.args.get("end_time_iso")
+                if (
+                    not isinstance(date_iso, str)
+                    or not isinstance(start_time_iso, str)
+                    or not isinstance(end_time_iso, str)
+                ):
+                    return {
+                        **state,
+                        "response_text": "Necesito la fecha y horario completo para verificar disponibilidad.",
+                        "conversation": conversation,
+                    }
+                availability_out = check_availability(
+                    CheckAvailabilityInput(
+                        date_iso=date_iso, start_time_iso=start_time_iso, end_time_iso=end_time_iso
+                    )
+                )
+                if availability_out.error_code is not None:
+                    return {
+                        **state,
+                        "response_text": "No pude verificar la disponibilidad en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                conversation = conversation.model_copy(
+                    update={
+                        "requested_booking_date": date_iso,
+                        "requested_booking_start_time": start_time_iso,
+                        "requested_booking_end_time": end_time_iso,
+                    }
+                )
+                if availability_out.available:
+                    start = start_time_iso.split("T")[1].split(":")[:2]
+                    end = end_time_iso.split("T")[1].split(":")[:2]
+                    response = f"¡Perfecto! El horario del {date_iso} de {':'.join(start)} a {':'.join(end)} está disponible. ¿Confirmás la reserva?"
+                    return {**state, "response_text": response, "conversation": conversation}
+                start = start_time_iso.split("T")[1].split(":")[:2]
+                end = end_time_iso.split("T")[1].split(":")[:2]
+                response = f"Lo siento, el horario del {date_iso} de {':'.join(start)} a {':'.join(end)} no está disponible. ¿Querés consultar otros horarios?"
+                return {**state, "response_text": response, "conversation": conversation}
+
+            if action.tool == "create_booking":
+                if customer_id is None:
+                    return {
+                        **state,
+                        "response_text": "Necesito tu identificador de cliente para crear la reserva.",
+                        "conversation": conversation,
+                    }
+                booking_date = action.args.get("date_iso") or conversation.requested_booking_date
+                booking_start = action.args.get("start_time_iso") or conversation.requested_booking_start_time
+                booking_end = action.args.get("end_time_iso") or conversation.requested_booking_end_time
+                customer_name = action.args.get("customer_name") or conversation.customer_name
+                if (
+                    not isinstance(booking_date, str)
+                    or not isinstance(booking_start, str)
+                    or not isinstance(booking_end, str)
+                    or not isinstance(customer_name, str)
+                ):
+                    return {
+                        **state,
+                        "response_text": "Faltan datos para crear la reserva. Necesito fecha, horario de inicio y fin.",
+                        "conversation": conversation,
+                    }
+                booking_out = create_booking(
+                    CreateBookingInput(
+                        customer_id=customer_id,
+                        customer_name=customer_name,
+                        date_iso=booking_date,
+                        start_time_iso=booking_start,
+                        end_time_iso=booking_end,
+                    )
+                )
+                if not booking_out.success or booking_out.booking_id is None:
+                    return {
+                        **state,
+                        "response_text": "No pude crear la reserva en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                conversation = conversation.model_copy(update={"last_booking_id": booking_out.booking_id})
+                start = booking_start.split("T")[1].split(":")[:2]
+                end = booking_end.split("T")[1].split(":")[:2]
+                response = (
+                    f"¡Reserva confirmada! Tu reserva {booking_out.booking_id} está confirmada para el "
+                    f"{booking_date} de {':'.join(start)} a {':'.join(end)}.\n"
+                    f"Te enviaremos un email de confirmación y te avisaremos con anticipación como recordatorio."
+                )
+                if customer_id is not None:
+                    tools = get_vector_memory_tools()
+                    if tools is not None:
+                        tools.remember(customer_id=customer_id, text=response)
+                return {**state, "response_text": response, "conversation": conversation}
+
+            if action.tool == "get_booking":
+                booking_id = action.args.get("booking_id")
+                if not isinstance(booking_id, str) or booking_id.strip() == "":
+                    return {
+                        **state,
+                        "response_text": "Necesito el ID de la reserva para consultarla. ¿Cuál es el ID de tu reserva?",
+                        "conversation": conversation,
+                    }
+                booking_out = get_booking(GetBookingInput(booking_id=booking_id))
+                if not booking_out.found:
+                    return {
+                        **state,
+                        "response_text": f"No encontré la reserva {booking_id}. Verificá el ID e intentá de nuevo.",
+                        "conversation": conversation,
+                    }
+                start = booking_out.start_time_iso.split("T")[1].split(":")[:2] if booking_out.start_time_iso else ["", ""]
+                end = booking_out.end_time_iso.split("T")[1].split(":")[:2] if booking_out.end_time_iso else ["", ""]
+                response = (
+                    f"Reserva {booking_out.booking_id}:\n"
+                    f"- Cliente: {booking_out.customer_name}\n"
+                    f"- Fecha: {booking_out.date_iso}\n"
+                    f"- Horario: {':'.join(start)} a {':'.join(end)}\n"
+                    f"- Estado: {booking_out.status}"
+                )
+                return {**state, "response_text": response, "conversation": conversation}
+
+            if action.tool == "list_bookings":
+                if customer_id is None:
+                    return {
+                        **state,
+                        "response_text": "Necesito tu identificador de cliente para consultar tus reservas.",
+                        "conversation": conversation,
+                    }
+                bookings_out = list_bookings(ListBookingsInput(customer_id=customer_id))
+                if bookings_out.error_code is not None:
+                    return {
+                        **state,
+                        "response_text": "No pude consultar tus reservas en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                if len(bookings_out.bookings) == 0:
+                    return {
+                        **state,
+                        "response_text": "No tenés reservas registradas. ¿Querés hacer una nueva reserva?",
+                        "conversation": conversation,
+                    }
+                lines = ["Tus reservas:"]
+                for booking in bookings_out.bookings[:10]:
+                    start = booking.start_time_iso.split("T")[1].split(":")[:2] if booking.start_time_iso else ["", ""]
+                    end = booking.end_time_iso.split("T")[1].split(":")[:2] if booking.end_time_iso else ["", ""]
+                    lines.append(
+                        f"- {booking.booking_id}: {booking.date_iso} de {':'.join(start)} a {':'.join(end)} ({booking.status})"
+                    )
+                return {**state, "response_text": "\n".join(lines), "conversation": conversation}
+
+            if action.tool == "update_booking":
+                booking_id = action.args.get("booking_id")
+                if not isinstance(booking_id, str) or booking_id.strip() == "":
+                    return {
+                        **state,
+                        "response_text": "Necesito el ID de la reserva para actualizarla. ¿Cuál es el ID de tu reserva?",
+                        "conversation": conversation,
+                    }
+                update_input = UpdateBookingInput(booking_id=booking_id)
+                if "date_iso" in action.args:
+                    update_input.date_iso = action.args["date_iso"]
+                if "start_time_iso" in action.args:
+                    update_input.start_time_iso = action.args["start_time_iso"]
+                if "end_time_iso" in action.args:
+                    update_input.end_time_iso = action.args["end_time_iso"]
+                if "status" in action.args:
+                    update_input.status = action.args["status"]
+                update_out = update_booking(update_input)
+                if not update_out.success:
+                    return {
+                        **state,
+                        "response_text": "No pude actualizar la reserva en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                response = f"Reserva {booking_id} actualizada exitosamente."
+                return {**state, "response_text": response, "conversation": conversation}
+
+            if action.tool == "delete_booking":
+                booking_id = action.args.get("booking_id")
+                if not isinstance(booking_id, str) or booking_id.strip() == "":
+                    return {
+                        **state,
+                        "response_text": "Necesito el ID de la reserva para cancelarla. ¿Cuál es el ID de tu reserva?",
+                        "conversation": conversation,
+                    }
+                delete_out = delete_booking(DeleteBookingInput(booking_id=booking_id))
+                if not delete_out.success:
+                    return {
+                        **state,
+                        "response_text": "No pude cancelar la reserva en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                response = f"Reserva {booking_id} cancelada exitosamente."
+                return {**state, "response_text": response, "conversation": conversation}
+
+            if action.tool == "vector_recall":
+                if customer_id is None:
+                    return {
+                        **state,
+                        "response_text": "Necesito tu identificador de cliente para buscar en tus reservas.",
+                        "conversation": conversation,
+                    }
+                tools = get_vector_memory_tools()
+                if tools is not None:
+                    query = action.args.get("query", user_text)
+                    k = int(action.args.get("k", 3))
+                    recalled = tools.recall(customer_id=customer_id, query=str(query), k=k)
+                    if recalled:
+                        lines = ["Encontré estas reservas relacionadas:"]
+                        for entry in recalled[:3]:
+                            lines.append(f"- {entry.text}")
+                        return {**state, "response_text": "\n".join(lines), "conversation": conversation}
+                    return {
+                        **state,
+                        "response_text": "No encontré reservas relacionadas. ¿Querés hacer una nueva reserva?",
+                        "conversation": conversation,
+                    }
+                return {
+                    **state,
+                    "response_text": "La búsqueda de reservas no está disponible en este momento.",
+                    "conversation": conversation,
+                }
+
+    # Fallback
+    return {**state, "response_text": f"Hola {conversation.customer_name}, ¿en qué puedo ayudarte?", "conversation": conversation}
 
 
 def unknown_node(state: GraphState) -> GraphState:
