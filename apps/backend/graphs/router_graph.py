@@ -643,6 +643,97 @@ def _extract_name_from_text(text: str) -> str | None:
     return None
 
 
+def _parse_date_and_time(user_text: str) -> tuple[str | None, str | None, str | None]:
+    """
+    Parsea fecha y hora del texto del usuario.
+    
+    Soporta formatos:
+    - Fecha: día/mes (15/01), día de mes (15 de enero)
+    - Hora: 24 horas (18 horas, 19:00), AM/PM (2 PM, 10 AM), rangos (18-20 horas)
+    
+    Returns:
+        tuple: (date_iso, start_time_iso, end_time_iso) o (None, None, None) si no se encuentra
+    """
+    import re
+    from datetime import datetime
+    
+    current_year = datetime.now().year
+    date_iso = None
+    start_time_iso = None
+    end_time_iso = None
+    
+    # Patrones de fecha: día/mes (15/01) o día de mes (15 de enero)
+    date_patterns = [
+        r"(\d{1,2})/(\d{1,2})",  # 15/01
+        r"(?:para\s+el|el|día)\s+(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
+        r"(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
+    ]
+    
+    months = {
+        "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06",
+        "julio": "07", "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
+    }
+    
+    # Extraer fecha
+    for pattern in date_patterns:
+        match = re.search(pattern, user_text.lower())
+        if match:
+            if "/" in pattern:  # Formato día/mes
+                day = match.group(1).zfill(2)
+                month = match.group(2).zfill(2)
+                if 1 <= int(month) <= 12 and 1 <= int(day) <= 31:
+                    date_iso = f"{current_year}-{month}-{day}"
+                    break
+            else:  # Formato día de mes
+                day = match.group(1).zfill(2)
+                month_name = match.group(2).lower()
+                if month_name in months:
+                    date_iso = f"{current_year}-{months[month_name]}-{day}"
+                    break
+    
+    # Extraer hora (solo si ya tenemos fecha)
+    if date_iso:
+        # Patrones: 18 horas, 19:00, 2 PM, 10 AM, 18-20 horas
+        time_patterns = [
+            (r"(\d{1,2})\s*-\s*(\d{1,2})\s*(?:horas|hs|h)", "range_hours"),  # Rango: 18-20 horas
+            (r"(\d{1,2})\s*(?:horas|hs|h)", "single_hour"),  # 18 horas
+            (r"(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?", "time_with_minutes"),  # 18:00 o 18:00-20:00
+            (r"(\d{1,2})\s*(AM|PM|am|pm)", "ampm"),  # 2 PM, 10 AM
+        ]
+        
+        for pattern, pattern_type in time_patterns:
+            match = re.search(pattern, user_text, re.IGNORECASE)
+            if match:
+                if pattern_type == "ampm":  # Formato AM/PM
+                    hour = int(match.group(1))
+                    period = match.group(2).upper()
+                    if period == "PM" and hour != 12:
+                        hour += 12
+                    elif period == "AM" and hour == 12:
+                        hour = 0
+                    start_time_iso = f"{date_iso}T{hour:02d}:00:00Z"
+                elif pattern_type == "time_with_minutes":  # Formato 18:00
+                    hour = int(match.group(1))
+                    minute = int(match.group(2))
+                    start_time_iso = f"{date_iso}T{hour:02d}:{minute:02d}:00Z"
+                    # Rango si existe (grupos 3 y 4)
+                    if match.lastindex and match.lastindex >= 4 and match.group(3) and match.group(4):
+                        end_hour = int(match.group(3))
+                        end_minute = int(match.group(4))
+                        end_time_iso = f"{date_iso}T{end_hour:02d}:{end_minute:02d}:00Z"
+                elif pattern_type == "range_hours":  # Rango: 18-20 horas
+                    start_hour = int(match.group(1))
+                    end_hour = int(match.group(2))
+                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00Z"
+                    end_time_iso = f"{date_iso}T{end_hour:02d}:00:00Z"
+                else:  # Formato 18 horas (single)
+                    start_hour = int(match.group(1))
+                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00Z"
+                break
+    
+    return (date_iso, start_time_iso, end_time_iso)
+
+
 def _is_confirmation(text: str) -> bool:
     """Check if user text indicates confirmation."""
     text_lower = text.lower().strip()
@@ -1522,10 +1613,11 @@ def autonomous_node(state: GraphState) -> GraphState:
     is_first = _is_first_interaction(conversation)
     logger.info("autonomous.first_interaction", is_first=is_first, user_text=user_text)
     if is_first:
+        format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
         if conversation.customer_name:
-            greeting = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+            greeting = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
         else:
-            greeting = "¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+            greeting = f"¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
         logger.info("autonomous.greeting", greeting=greeting)
         return {**state, "response_text": greeting, "conversation": conversation}
 
@@ -1534,10 +1626,11 @@ def autonomous_node(state: GraphState) -> GraphState:
     text_lower = user_text.lower().strip()
     saludos_comunes = {"hola", "hi", "hello", "buenos días", "buenos dias", "buenas tardes", "buenas noches"}
     if text_lower in saludos_comunes:
+        format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
         if conversation.customer_name:
-            response = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+            response = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
         else:
-            response = "¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+            response = f"¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
         logger.info("autonomous.saludo_detectado", user_text=user_text, response=response)
         return {**state, "response_text": response, "conversation": conversation}
 
@@ -1559,57 +1652,51 @@ def autonomous_node(state: GraphState) -> GraphState:
         conversation = conversation.model_copy(update={"customer_name": name})
         # Continuar con el flujo normal (no retornar aquí, dejar que el planner procese)
 
-    # Step 3: Extraer fecha del texto si está presente (antes de llamar al planner)
-    # Esto ayuda al planner a tener contexto de la fecha mencionada
-    import re
-    from datetime import datetime
-    date_patterns = [
-        r"(?:para\s+el|el|día)\s+(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
-        r"(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)",
-    ]
-    months = {
-        "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06",
-        "julio": "07", "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
-    }
-    extracted_date = None
-    user_mentions_date = False
-    for pattern in date_patterns:
-        match = re.search(pattern, user_text.lower())
-        if match:
-            day = match.group(1).zfill(2)
-            month_name = match.group(2).lower()
-            if month_name in months:
-                current_year = datetime.now().year
-                extracted_date = f"{current_year}-{months[month_name]}-{day}"
-                user_mentions_date = True
-                # Guardar la fecha en la conversación si no está ya guardada
-                if conversation.requested_booking_date != extracted_date:
-                    conversation = conversation.model_copy(update={"requested_booking_date": extracted_date})
-                break
+    # Step 3: Extraer fecha y hora del texto si está presente (antes de llamar al planner)
+    # Esto ayuda al planner a tener contexto de la fecha y hora mencionada
+    parsed_date, parsed_start_time, parsed_end_time = _parse_date_and_time(user_text)
+    extracted_date = parsed_date
+    user_mentions_date = parsed_date is not None
+    
+    # Guardar la fecha y hora en la conversación si se encontraron
+    if extracted_date:
+        if conversation.requested_booking_date != extracted_date:
+            conversation = conversation.model_copy(update={"requested_booking_date": extracted_date})
+        if parsed_start_time and conversation.requested_booking_start_time != parsed_start_time:
+            conversation = conversation.model_copy(update={"requested_booking_start_time": parsed_start_time})
+        if parsed_end_time and conversation.requested_booking_end_time != parsed_end_time:
+            conversation = conversation.model_copy(update={"requested_booking_end_time": parsed_end_time})
     
     # Detectar si el usuario está preguntando sobre disponibilidad/horarios
     availability_keywords = ["horarios", "disponibilidad", "disponible", "slots", "turnos", "agenda", "qué horas", "qué horarios"]
     user_asks_availability = any(keyword in user_text.lower() for keyword in availability_keywords)
     
-    # Solo usar fecha guardada si:
+    # Solo usar fecha y hora guardadas si:
     # 1. El usuario menciona una fecha en su mensaje actual, O
     # 2. El usuario está preguntando explícitamente sobre disponibilidad/horarios
     date_to_pass = None
+    start_time_to_pass = None
+    end_time_to_pass = None
+    
     if user_mentions_date:
         date_to_pass = extracted_date or conversation.requested_booking_date
+        start_time_to_pass = parsed_start_time or conversation.requested_booking_start_time
+        end_time_to_pass = parsed_end_time or conversation.requested_booking_end_time
     elif user_asks_availability and conversation.requested_booking_date:
         date_to_pass = conversation.requested_booking_date
-    # Si no se cumple ninguna condición, no pasar fecha (date_to_pass = None)
+        start_time_to_pass = conversation.requested_booking_start_time
+        end_time_to_pass = conversation.requested_booking_end_time
+    # Si no se cumple ninguna condición, no pasar fecha/hora (None)
 
     # Step 5: Usar planner para generar plan
-    logger.info("autonomous.llamando_planner", user_text=user_text, customer_name=conversation.customer_name)
+    logger.info("autonomous.llamando_planner", user_text=user_text, customer_name=conversation.customer_name, date=date_to_pass)
     plan = planner.plan(
         user_text=user_text,
         customer_id=customer_id,
         customer_name=conversation.customer_name,
         requested_booking_date=date_to_pass,
-        requested_booking_start_time=conversation.requested_booking_start_time if user_mentions_date or user_asks_availability else None,
-        requested_booking_end_time=conversation.requested_booking_end_time if user_mentions_date or user_asks_availability else None,
+        requested_booking_start_time=start_time_to_pass,
+        requested_booking_end_time=end_time_to_pass,
     )
 
     if plan is None or not plan.actions:

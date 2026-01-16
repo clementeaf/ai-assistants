@@ -89,9 +89,14 @@ Rules for using functions:
 - If booking_id is missing when needed, ask for it (type=ask_user)
 - Keep actions short: at most 2 actions
 - Do not output any extra keys
-- IMPORTANT: Parse dates in Spanish format (e.g., "Jueves 8 de Enero" = "2025-01-08", "8 de enero" = "2025-01-08")
-- IMPORTANT: Parse times in Spanish format (e.g., "18 horas" = "18:00:00", "a las 18" = "18:00:00")
-- IMPORTANT: Use the current year if not specified. Convert month names: enero=01, febrero=02, marzo=03, abril=04, mayo=05, junio=06, julio=07, agosto=08, septiembre=09, octubre=10, noviembre=11, diciembre=12
+- IMPORTANT: Parse dates in Spanish format:
+  * Formato día/mes: "15/01" = "2025-01-15" (año actual)
+  * Formato día de mes: "8 de enero" = "2025-01-08", "15 de enero" = "2025-01-15" (año actual)
+- IMPORTANT: Parse times in multiple formats:
+  * 24 horas: "18 horas" = "18:00:00", "19:00" = "19:00:00"
+  * AM/PM: "2 PM" = "14:00:00", "10 AM" = "10:00:00"
+  * Rangos: "18-20 horas" = start "18:00:00", end "20:00:00"
+- IMPORTANT: Always use the current year if not specified. Convert month names: enero=01, febrero=02, marzo=03, abril=04, mayo=05, junio=06, julio=07, agosto=08, septiembre=09, octubre=10, noviembre=11, diciembre=12
 - IMPORTANT: Always output dates in ISO format YYYY-MM-DD and times in ISO format YYYY-MM-DDTHH:MM:SSZ (use UTC timezone)
 - IMPORTANT: Never invent booking IDs (BOOKING-XXX), order IDs (ORDER-XXX), or any other identifiers
 - IMPORTANT: Never make up dates, amounts, or customer information
