@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Flow, FlowStage, AddStageRequest } from '../../lib/api/flows';
 import SystemPromptViewer from './SystemPromptViewer';
 import StageCard from './StageCard';
 import AddStageButton from './AddStageButton';
+import { getDomainMetadata } from '../../lib/api/automata';
 
 interface FlowDetailsProps {
   flow: Flow;
