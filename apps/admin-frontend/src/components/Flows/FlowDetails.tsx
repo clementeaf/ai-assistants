@@ -10,7 +10,6 @@ interface FlowDetailsProps {
   stages: FlowStage[];
   loading: boolean;
   onUpdateStagePrompt: (stageId: string, promptText: string) => Promise<void>;
-  onUpdateStageRules: (stageId: string, validationRules: string) => Promise<void>;
   onDeleteStage: (stageId: string) => Promise<void>;
   onMoveStage: (stageId: string, direction: 'up' | 'down') => Promise<void>;
   onAddStage: (request: AddStageRequest) => Promise<void>;
@@ -24,7 +23,6 @@ interface FlowDetailsProps {
  * @param stages - Etapas del flujo
  * @param loading - Estado de carga
  * @param onUpdateStagePrompt - Callback para actualizar el prompt de una etapa
- * @param onUpdateStageRules - Callback para actualizar las reglas de una etapa
  * @param onDeleteStage - Callback para eliminar una etapa
  * @param onMoveStage - Callback para mover una etapa
  * @param onAddStage - Callback para agregar una etapa
@@ -35,7 +33,6 @@ function FlowDetails({
   stages,
   loading,
   onUpdateStagePrompt,
-  onUpdateStageRules,
   onDeleteStage,
   onMoveStage,
   onAddStage,
@@ -189,7 +186,6 @@ function FlowDetails({
                     index={index}
                     totalStages={regularStages.length}
                     onUpdatePrompt={(promptText: string) => onUpdateStagePrompt(stage.stage_id, promptText)}
-                    onUpdateRules={(rules: string) => onUpdateStageRules(stage.stage_id, rules)}
                     onDelete={() => onDeleteStage(stage.stage_id)}
                     onMoveUp={() => onMoveStage(stage.stage_id, 'up')}
                     onMoveDown={() => onMoveStage(stage.stage_id, 'down')}

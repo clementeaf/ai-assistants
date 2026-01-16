@@ -303,7 +303,6 @@ function Flows() {
             stages={stages}
             loading={loading}
             onUpdateStagePrompt={handleUpdateStagePrompt}
-            onUpdateStageRules={handleUpdateStageRules}
             onDeleteStage={handleDeleteStage}
             onMoveStage={handleMoveStage}
             onAddStage={handleAddStage}
