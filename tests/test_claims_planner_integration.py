@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from ai_assistants.agents.claims_planner import AskUserAction, ClaimsPlanner, PlannerOutput, ToolCallAction
-from ai_assistants.agents.claims_runtime import set_claims_planner
+from ai_assistants.automata.claims.planner import AskUserAction, ClaimsPlanner, PlannerOutput, ToolCallAction
+from ai_assistants.automata.claims.runtime import set_claims_planner
 from ai_assistants.orchestrator.runtime import Orchestrator
 from ai_assistants.persistence.sqlite_memory_store import SqliteCustomerMemoryStore, load_sqlite_memory_store_config
 from ai_assistants.persistence.sqlite_store import SqliteConversationStore, load_sqlite_store_config

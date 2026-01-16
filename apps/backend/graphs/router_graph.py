@@ -10,10 +10,10 @@ from typing import Any, TypedDict
 import httpx
 from langgraph.graph import END, StateGraph
 
-from ai_assistants.agents.bookings_runtime import get_bookings_planner
-from ai_assistants.agents.claims_runtime import get_claims_planner
-from ai_assistants.agents.purchases_runtime import get_purchases_planner
-from ai_assistants.agents.autonomous_runtime import get_autonomous_planner
+from ai_assistants.automata.bookings.runtime import get_bookings_planner
+from ai_assistants.automata.claims.runtime import get_claims_planner
+from ai_assistants.automata.purchases.runtime import get_purchases_planner
+from ai_assistants.automata.autonomous.runtime import get_autonomous_planner
 from ai_assistants.orchestrator.state import ConversationState, MessageRole
 from ai_assistants.tools.contracts import (
     CheckAvailabilityInput,

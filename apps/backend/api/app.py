@@ -567,9 +567,12 @@ def create_app() -> FastAPI:
         """
         _bind_auth_context(auth)
         _enforce_rate_limit(auth)
-        from ai_assistants.utils.prompts import load_prompt_text
+        from pathlib import Path
         try:
-            prompt = load_prompt_text("autonomous_system.txt")
+            # Cargar prompt desde automata/autonomous
+            prompt_path = Path(__file__).parent.parent / "automata" / "autonomous" / "prompt.txt"
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                prompt = f.read()
             return {"prompt": prompt}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error loading system prompt: {str(e)}")

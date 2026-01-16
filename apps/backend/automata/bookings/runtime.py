@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_assistants.agents.bookings_planner import BookingsPlanner, build_bookings_planner_from_env
+from ai_assistants.automata.bookings.planner import BookingsPlanner, build_bookings_planner_from_env
 
 _planner: BookingsPlanner | None = None
 

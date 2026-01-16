@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_assistants.agents.autonomous_planner import AutonomousPlanner, build_autonomous_planner_from_env
+from ai_assistants.automata.autonomous.planner import AutonomousPlanner, build_autonomous_planner_from_env
 
 _planner: AutonomousPlanner | None = None
 

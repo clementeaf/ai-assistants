@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from ai_assistants.agents.purchases_planner import PlannerOutput
-from ai_assistants.agents.purchases_runtime import set_purchases_planner
+from ai_assistants.automata.purchases.planner import PlannerOutput
+from ai_assistants.automata.purchases.runtime import set_purchases_planner
 from ai_assistants.orchestrator.runtime import Orchestrator
 from ai_assistants.persistence.sqlite_store import SqliteConversationStore, load_sqlite_store_config
 from ai_assistants.persistence.sqlite_memory_store import SqliteCustomerMemoryStore, load_sqlite_memory_store_config

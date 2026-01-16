@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_assistants.agents.purchases_planner import PurchasesPlanner, build_purchases_planner_from_env
+from ai_assistants.automata.purchases.planner import PurchasesPlanner, build_purchases_planner_from_env
 
 _planner: PurchasesPlanner | None = None
 

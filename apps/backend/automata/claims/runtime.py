@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_assistants.agents.claims_planner import ClaimsPlanner, build_claims_planner_from_env
+from ai_assistants.automata.claims.planner import ClaimsPlanner, build_claims_planner_from_env
 
 _planner: ClaimsPlanner | None = None
 

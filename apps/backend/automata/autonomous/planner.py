@@ -11,7 +11,7 @@ from ai_assistants.adapters.mcp_llm_config import load_mcp_llm_config
 from ai_assistants.llm.chat_client import ChatClient
 from ai_assistants.llm.openai_compatible import OpenAICompatibleClient, load_openai_compatible_config
 from ai_assistants.observability.logging import get_logger
-from ai_assistants.utils.prompts import load_prompt_text
+from pathlib import Path
 
 
 ToolName = Literal[
@@ -46,25 +46,28 @@ class PlannerOutput(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
-class BookingsPlannerConfig:
+class AutonomousPlannerConfig:
     enabled: bool
 
 
-def load_bookings_planner_config() -> BookingsPlannerConfig:
+def load_autonomous_planner_config() -> AutonomousPlannerConfig:
     import os
 
-    raw = os.getenv("AI_ASSISTANTS_BOOKINGS_PLANNER_ENABLED", "0").strip().lower()
+    raw = os.getenv("AI_ASSISTANTS_AUTONOMOUS_ENABLED", "0").strip().lower()
     enabled = raw in {"1", "true", "yes", "on"}
-    return BookingsPlannerConfig(enabled=enabled)
+    return AutonomousPlannerConfig(enabled=enabled)
 
 
-class BookingsPlanner:
-    """LLM-based planner for bookings/reservations domain."""
+class AutonomousPlanner:
+    """LLM-based planner for autonomous booking assistant mode."""
 
     def __init__(self, client: ChatClient) -> None:
         self._client = client
         self._logger = get_logger()
-        self._system = load_prompt_text("bookings_planner_system.txt")
+        # Cargar prompt desde la carpeta del autómata
+        prompt_path = Path(__file__).parent / "prompt.txt"
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            self._system = f.read()
 
     def plan(
         self,
@@ -75,17 +78,26 @@ class BookingsPlanner:
         requested_booking_date: str | None = None,
         requested_booking_start_time: str | None = None,
         requested_booking_end_time: str | None = None,
+        previous_bookings_summary: str | None = None,
+        is_recurring_customer: bool = False,
     ) -> PlannerOutput | None:
+        context = {
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "requested_booking_date": requested_booking_date,
+            "requested_booking_start_time": requested_booking_start_time,
+            "requested_booking_end_time": requested_booking_end_time,
+        }
+        
+        # Agregar contexto de reservas previas si existe
+        if is_recurring_customer and previous_bookings_summary:
+            context["previous_bookings"] = previous_bookings_summary
+            context["is_recurring_customer"] = True
+        
         user = json.dumps(
             {
                 "user_text": user_text,
-                "context": {
-                    "customer_id": customer_id,
-                    "customer_name": customer_name,
-                    "requested_booking_date": requested_booking_date,
-                    "requested_booking_start_time": requested_booking_start_time,
-                    "requested_booking_end_time": requested_booking_end_time,
-                },
+                "context": context,
             },
             ensure_ascii=False,
         )
@@ -94,23 +106,21 @@ class BookingsPlanner:
             parsed = PlannerOutput.model_validate(json.loads(content))
             return parsed
         except (ValueError, ValidationError) as exc:
-            self._logger.warning("bookings_planner.invalid_output", error=str(exc))
+            self._logger.warning("autonomous_planner.invalid_output", error=str(exc))
             return None
 
 
-def build_bookings_planner_from_env() -> BookingsPlanner | None:
-    cfg = load_bookings_planner_config()
+def build_autonomous_planner_from_env() -> AutonomousPlanner | None:
+    cfg = load_autonomous_planner_config()
     if not cfg.enabled:
         return None
 
-    # Priority: MCP LLM adapter > Direct OpenAI-compatible client
     mcp_llm_cfg = load_mcp_llm_config()
     if mcp_llm_cfg is not None:
-        return BookingsPlanner(MCPLLMAdapter(mcp_llm_cfg.server_url, mcp_llm_cfg.api_key, mcp_llm_cfg.timeout_seconds))
+        return AutonomousPlanner(MCPLLMAdapter(mcp_llm_cfg.server_url, mcp_llm_cfg.api_key, mcp_llm_cfg.timeout_seconds))
 
     llm_cfg = load_openai_compatible_config()
     if llm_cfg is None:
-        get_logger().warning("bookings_planner.disabled_missing_llm_config")
+        get_logger().warning("autonomous_planner.disabled_missing_llm_config")
         return None
-    return BookingsPlanner(OpenAICompatibleClient(llm_cfg))
-
+    return AutonomousPlanner(OpenAICompatibleClient(llm_cfg))

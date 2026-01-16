@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ai_assistants.llm.openai_compatible import OpenAICompatibleClient, load_openai_compatible_config
 from ai_assistants.observability.logging import get_logger
-from ai_assistants.utils.prompts import load_prompt_text
+from pathlib import Path
 
 
 class ChatClient(Protocol):
@@ -61,7 +61,10 @@ class ClaimsPlanner:
     def __init__(self, client: ChatClient) -> None:
         self._client = client
         self._logger = get_logger()
-        self._system = load_prompt_text("claims_planner_system.txt")
+        # Cargar prompt desde la carpeta del autómata
+        prompt_path = Path(__file__).parent / "prompt.txt"
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            self._system = f.read()
 
     def plan(
         self,
