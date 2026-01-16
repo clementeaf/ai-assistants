@@ -48,24 +48,34 @@ function FlowDetails({
     .filter((s) => s.stage_type !== 'system_prompt')
     .sort((a, b) => a.stage_order - b.stage_order);
 
+  const [domainMetadata, setDomainMetadata] = useState<{ display_name: string; description: string } | null>(null);
+
+  useEffect(() => {
+    const loadMetadata = async (): Promise<void> => {
+      try {
+        const metadata = await getDomainMetadata(flow.domain);
+        setDomainMetadata({
+          display_name: metadata.display_name,
+          description: metadata.description,
+        });
+      } catch (error) {
+        console.error('Error loading domain metadata:', error);
+        // Usar valores por defecto si falla
+        setDomainMetadata({
+          display_name: flow.name,
+          description: flow.description || 'Flujo de conversación configurable',
+        });
+      }
+    };
+    loadMetadata();
+  }, [flow.domain, flow.name, flow.description]);
+
   const getFlowDisplayName = (): string => {
-    if (flow.domain === 'bookings') {
-      return 'Asistente de Reservas con Google Calendar';
-    }
-    if (flow.domain === 'purchases') {
-      return 'Asistente de Compras';
-    }
-    if (flow.domain === 'claims') {
-      return 'Asistente de Reclamos';
-    }
-    return flow.name;
+    return domainMetadata?.display_name || flow.name;
   };
 
   const getFlowDescription = (): string => {
-    if (flow.domain === 'bookings') {
-      return 'Autómata que gestiona reservas conectándose con Google Calendar mediante prompts y etapas configurables';
-    }
-    return flow.description || 'Flujo de conversación configurable';
+    return domainMetadata?.description || flow.description || 'Flujo de conversación configurable';
   };
 
   return (

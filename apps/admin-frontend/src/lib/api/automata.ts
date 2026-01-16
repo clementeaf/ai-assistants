@@ -196,3 +196,45 @@ export async function getAutomatonChanges(
     limit,
   });
 }
+
+export interface DomainMetadata {
+  domain: string;
+  display_name: string;
+  description: string;
+  activation_code: string;
+  is_enabled: boolean;
+}
+
+export interface DomainTool {
+  name: string;
+  description: string;
+  input: Record<string, string>;
+  output: Record<string, string>;
+}
+
+/**
+ * Obtiene lista de dominios disponibles con su metadata
+ */
+export async function listDomains(): Promise<{ domains: DomainMetadata[]; count: number }> {
+  const { apiClient } = await import('./client');
+  const response = await apiClient.getInstance().get<{ domains: DomainMetadata[]; count: number }>('/v1/automata/domains/list');
+  return response.data;
+}
+
+/**
+ * Obtiene las herramientas disponibles para un dominio específico
+ */
+export async function getDomainTools(domain: string): Promise<{ domain: string; tools: DomainTool[]; count: number }> {
+  const { apiClient } = await import('./client');
+  const response = await apiClient.getInstance().get<{ domain: string; tools: DomainTool[]; count: number }>(`/v1/automata/domains/${domain}/tools`);
+  return response.data;
+}
+
+/**
+ * Obtiene metadata completa de un dominio
+ */
+export async function getDomainMetadata(domain: string): Promise<DomainMetadata & { tools: DomainTool[] }> {
+  const { apiClient } = await import('./client');
+  const response = await apiClient.getInstance().get<DomainMetadata & { tools: DomainTool[] }>(`/v1/automata/domains/${domain}/metadata`);
+  return response.data;
+}

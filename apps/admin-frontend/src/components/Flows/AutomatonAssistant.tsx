@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, X, Sparkles } from 'lucide-react';
 import { apiClient } from '../../lib/api/client';
+import { getDomainTools, getDomainMetadata, type DomainTool } from '../../lib/api/automata';
 
 interface Message {
   id: string;
@@ -34,12 +35,37 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
+  const [domainTools, setDomainTools] = useState<DomainTool[]>([]);
+  const [domainMetadata, setDomainMetadata] = useState<{ display_name: string; description: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const conversationIdRef = useRef(`automaton-assistant-${Date.now()}`);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    // Cargar herramientas y metadata del dominio dinámicamente
+    const loadDomainInfo = async (): Promise<void> => {
+      try {
+        const [toolsResponse, metadataResponse] = await Promise.all([
+          getDomainTools(flow.domain),
+          getDomainMetadata(flow.domain).catch(() => null),
+        ]);
+        setDomainTools(toolsResponse.tools);
+        if (metadataResponse) {
+          setDomainMetadata({
+            display_name: metadataResponse.display_name,
+            description: metadataResponse.description,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading domain info:', error);
+        // Continuar sin herramientas si falla
+      }
+    };
+    loadDomainInfo();
+  }, [flow.domain]);
 
   useEffect(() => {
     // Obtener mensaje inicial del backend/LLM
@@ -49,6 +75,16 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
         const regularStages = stages
           .filter((s) => s.stage_type !== 'system_prompt')
           .sort((a, b) => a.stage_order - b.stage_order);
+        
+        // Construir información de herramientas dinámicamente
+        const toolsInfo = domainTools.length > 0 ? {
+          tools: domainTools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            input: tool.input,
+            output: tool.output,
+          })),
+        } : {};
         
         const automatonContext = {
           flow: {
@@ -70,6 +106,7 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
             validation_rules: s.validation_rules,
             is_required: s.is_required,
           })),
+          ...toolsInfo,
         };
 
         const response = await apiClient.getInstance().post(
@@ -103,8 +140,11 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
       }
     };
 
-    loadInitialMessage();
-  }, [flow, currentPrompt, stages]);
+    // Solo cargar mensaje inicial si ya tenemos las herramientas
+    if (domainTools.length > 0 || flow.domain) {
+      loadInitialMessage();
+    }
+  }, [flow, currentPrompt, stages, domainTools]);
 
   const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -132,61 +172,14 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
         .filter((s) => s.stage_type !== 'system_prompt')
         .sort((a, b) => a.stage_order - b.stage_order);
       
-      // Información sobre herramientas disponibles según el dominio
-      const availableTools = flow.domain === 'bookings' ? {
-        tools: [
-          {
-            name: 'get_available_slots',
-            description: 'Obtiene los horarios disponibles para una fecha específica',
-            input: { date_iso: 'string (YYYY-MM-DD)' },
-            output: { slots: 'array de {date_iso, start_time_iso, end_time_iso, available}' },
-          },
-          {
-            name: 'check_availability',
-            description: 'Verifica si un horario específico está disponible',
-            input: { date_iso: 'string', start_time_iso: 'string', end_time_iso: 'string' },
-            output: { available: 'boolean' },
-          },
-          {
-            name: 'create_booking',
-            description: 'Crea una nueva reserva',
-            input: { customer_id: 'string', customer_name: 'string', date_iso: 'string', start_time_iso: 'string', end_time_iso: 'string' },
-            output: { success: 'boolean', booking_id: 'string', date_iso: 'string', start_time_iso: 'string', end_time_iso: 'string' },
-          },
-          {
-            name: 'get_booking',
-            description: 'Obtiene los detalles de una reserva por ID',
-            input: { booking_id: 'string' },
-            output: { found: 'boolean', booking_id: 'string', customer_id: 'string', date_iso: 'string', status: 'string' },
-          },
-          {
-            name: 'list_bookings',
-            description: 'Lista todas las reservas de un cliente',
-            input: { customer_id: 'string' },
-            output: { bookings: 'array de reservas' },
-          },
-          {
-            name: 'update_booking',
-            description: 'Actualiza una reserva existente',
-            input: { booking_id: 'string', date_iso: 'string (opcional)', start_time_iso: 'string (opcional)', end_time_iso: 'string (opcional)', status: 'string (opcional)' },
-            output: { success: 'boolean', booking_id: 'string' },
-          },
-          {
-            name: 'delete_booking',
-            description: 'Elimina una reserva',
-            input: { booking_id: 'string' },
-            output: { success: 'boolean', booking_id: 'string' },
-          },
-        ],
-        expected_results: {
-          get_available_slots: 'Retorna lista de horarios disponibles. Si hay slots, presentarlos claramente. Si no hay disponibilidad, informar y sugerir fechas alternativas.',
-          check_availability: 'Retorna true/false. Si está disponible, proceder con creación o confirmar. Si no, ofrecer horarios alternativos cercanos.',
-          create_booking: 'Retorna booking_id y detalles. Confirmar al cliente con todos los detalles: booking_id, fecha, horario. Informar que recibirá confirmación por email.',
-          get_booking: 'Retorna detalles de la reserva. Presentar información clara: fecha, horario, estado.',
-          list_bookings: 'Retorna lista de reservas del cliente. Presentar de forma organizada. Si no hay reservas, informar al cliente.',
-          update_booking: 'Retorna confirmación de actualización. Confirmar los cambios realizados al cliente.',
-          delete_booking: 'Retorna confirmación de cancelación. Confirmar la cancelación de forma cordial.',
-        },
+      // Usar herramientas cargadas dinámicamente
+      const toolsInfo = domainTools.length > 0 ? {
+        tools: domainTools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          input: tool.input,
+          output: tool.output,
+        })),
       } : {};
       
       const automatonContext = {
@@ -207,9 +200,9 @@ function AutomatonAssistant({ onGeneratePrompt, onClose, flow, currentPrompt, st
           field_name: s.field_name,
           field_type: s.field_type,
           validation_rules: s.validation_rules,
-          is_required: s.is_required,
-        })),
-        ...availableTools,
+            is_required: s.is_required,
+          })),
+        ...toolsInfo,
       };
 
       const response = await apiClient.getInstance().post(

@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import type { CreateFlowRequest } from '../../lib/api/flows';
+import { listDomains, type DomainMetadata } from '../../lib/api/automata';
 
 interface CreateFlowModalProps {
   onClose: () => void;
@@ -9,6 +10,7 @@ interface CreateFlowModalProps {
 
 /**
  * Modal para crear un nuevo flujo
+ * Obtiene dominios disponibles dinámicamente desde el backend
  * @param onClose - Callback para cerrar el modal
  * @param onCreate - Callback para crear el flujo
  * @param loading - Estado de carga
@@ -17,7 +19,33 @@ interface CreateFlowModalProps {
 function CreateFlowModal({ onClose, onCreate, loading }: CreateFlowModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [domain, setDomain] = useState<'bookings' | 'purchases' | 'claims'>('bookings');
+  const [domain, setDomain] = useState<string>('');
+  const [domains, setDomains] = useState<DomainMetadata[]>([]);
+  const [loadingDomains, setLoadingDomains] = useState(true);
+
+  useEffect(() => {
+    const loadDomains = async (): Promise<void> => {
+      try {
+        const response = await listDomains();
+        setDomains(response.domains);
+        if (response.domains.length > 0) {
+          setDomain(response.domains[0].domain);
+        }
+      } catch (error) {
+        console.error('Error loading domains:', error);
+        // Fallback a dominios por defecto si falla
+        setDomains([
+          { domain: 'bookings', display_name: 'Reservas', description: '', activation_code: 'FLOW_RESERVA_INIT', is_enabled: true },
+          { domain: 'purchases', display_name: 'Compras', description: '', activation_code: 'FLOW_COMPRA_INIT', is_enabled: true },
+          { domain: 'claims', display_name: 'Reclamos', description: '', activation_code: 'FLOW_RECLAMO_INIT', is_enabled: true },
+        ]);
+        setDomain('bookings');
+      } finally {
+        setLoadingDomains(false);
+      }
+    };
+    loadDomains();
+  }, []);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -28,7 +56,9 @@ function CreateFlowModal({ onClose, onCreate, loading }: CreateFlowModalProps) {
     });
     setName('');
     setDescription('');
-    setDomain('bookings');
+    if (domains.length > 0) {
+      setDomain(domains[0].domain);
+    }
   };
 
   return (
@@ -60,15 +90,24 @@ function CreateFlowModal({ onClose, onCreate, loading }: CreateFlowModalProps) {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Dominio</label>
-              <select
-                value={domain}
-                onChange={(e) => setDomain(e.target.value as 'bookings' | 'purchases' | 'claims')}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="bookings">Reservas</option>
-                <option value="purchases">Compras</option>
-                <option value="claims">Reclamos</option>
-              </select>
+              {loadingDomains ? (
+                <div className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-400 text-sm">
+                  Cargando dominios...
+                </div>
+              ) : (
+                <select
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  {domains.map((d) => (
+                    <option key={d.domain} value={d.domain}>
+                      {d.display_name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <div className="flex gap-2 mt-6">

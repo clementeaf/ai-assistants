@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import type { Flow } from '../../lib/api/flows';
+import { getDomainMetadata, type DomainMetadata } from '../../lib/api/automata';
 
 interface FlowCardProps {
   flow: Flow;
@@ -8,31 +10,41 @@ interface FlowCardProps {
 
 /**
  * Tarjeta que representa un flujo creado
- * Muestra el nombre real del autómata del backend con su prompt y pasos
+ * Obtiene información del autómata dinámicamente desde el backend
  * @param flow - Flujo a mostrar
  * @param onSelect - Callback al seleccionar el flujo
  * @param onDelete - Callback al eliminar el flujo
  * @returns Componente FlowCard renderizado
  */
 function FlowCard({ flow, onSelect, onDelete }: FlowCardProps) {
+  const [domainMetadata, setDomainMetadata] = useState<DomainMetadata | null>(null);
+
+  useEffect(() => {
+    const loadMetadata = async (): Promise<void> => {
+      try {
+        const metadata = await getDomainMetadata(flow.domain);
+        setDomainMetadata(metadata);
+      } catch (error) {
+        console.error('Error loading domain metadata:', error);
+        // Usar valores por defecto si falla
+        setDomainMetadata({
+          domain: flow.domain,
+          display_name: flow.name,
+          description: flow.description || 'Flujo de conversación configurable',
+          activation_code: `FLOW_${flow.domain.toUpperCase()}_INIT`,
+          is_enabled: true,
+        });
+      }
+    };
+    loadMetadata();
+  }, [flow.domain, flow.name, flow.description]);
+
   const getFlowDisplayName = (): string => {
-    if (flow.domain === 'bookings') {
-      return 'Asistente de Reservas con Google Calendar';
-    }
-    if (flow.domain === 'purchases') {
-      return 'Asistente de Compras';
-    }
-    if (flow.domain === 'claims') {
-      return 'Asistente de Reclamos';
-    }
-    return flow.name;
+    return domainMetadata?.display_name || flow.name;
   };
 
   const getFlowDescription = (): string => {
-    if (flow.domain === 'bookings') {
-      return 'Autómata que gestiona reservas conectándose con Google Calendar mediante prompts y etapas configurables';
-    }
-    return flow.description || 'Flujo de conversación configurable';
+    return domainMetadata?.description || flow.description || 'Flujo de conversación configurable';
   };
 
   return (

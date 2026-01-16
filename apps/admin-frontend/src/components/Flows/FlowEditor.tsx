@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getDomainMetadata } from '../../lib/api/automata';
 import type { FlowStage } from '../../lib/api/flows';
 import StageModule from './StageModule';
 import AddStageModule from './AddStageModule';
@@ -35,6 +36,25 @@ function FlowEditor({
   flow,
 }: FlowEditorProps) {
   const [showLinks, setShowLinks] = useState(false);
+  const [activationCode, setActivationCode] = useState<string>('');
+
+  // Obtener número de WhatsApp desde variable de entorno
+  const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '56959263366';
+
+  useEffect(() => {
+    const loadActivationCode = async (): Promise<void> => {
+      if (!flow) return;
+      try {
+        const metadata = await getDomainMetadata(flow.domain);
+        setActivationCode(metadata.activation_code);
+      } catch (error) {
+        console.error('Error loading activation code:', error);
+        // Fallback si falla
+        setActivationCode(`FLOW_${flow.domain.toUpperCase()}_INIT`);
+      }
+    };
+    loadActivationCode();
+  }, [flow]);
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
@@ -80,13 +100,13 @@ function FlowEditor({
                   <div className="flex gap-1 mt-0.5">
                     <input
                       type="text"
-                      value={`https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`}
+                      value={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent('MENU_INIT')}`}
                       readOnly
                       className="flex-1 px-1.5 py-0.5 border rounded text-xs bg-white"
                     />
                     <button
                       onClick={async () => {
-                        const link = `https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`;
+                        const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('MENU_INIT')}`;
                         await navigator.clipboard.writeText(link);
                         alert('Link copiado');
                       }}
@@ -110,7 +130,7 @@ function FlowEditor({
                   <div>
                     <label className="text-xs font-medium text-gray-700">Código:</label>
                     <code className="block mt-0.5 bg-white px-1.5 py-0.5 rounded border text-xs font-mono">
-                      {flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT'}
+                      {activationCode || 'Cargando...'}
                     </code>
                   </div>
                   <div>
@@ -118,18 +138,19 @@ function FlowEditor({
                     <div className="flex gap-1 mt-0.5">
                       <input
                         type="text"
-                        value={`https://wa.me/56959263366?text=${encodeURIComponent(flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT')}`}
+                        value={activationCode ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(activationCode)}` : ''}
                         readOnly
                         className="flex-1 px-1.5 py-0.5 border rounded text-xs bg-white"
                       />
                       <button
                         onClick={async () => {
-                          const code = flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT';
-                          const link = `https://wa.me/56959263366?text=${encodeURIComponent(code)}`;
+                          if (!activationCode) return;
+                          const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(activationCode)}`;
                           await navigator.clipboard.writeText(link);
                           alert('Link copiado');
                         }}
-                        className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                        disabled={!activationCode}
+                        className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
                         Copiar
                       </button>

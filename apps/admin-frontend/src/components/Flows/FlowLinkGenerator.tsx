@@ -1,30 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { type Flow } from '../../lib/api/flows';
+import { getDomainMetadata } from '../../lib/api/automata';
 
 interface FlowLinkGeneratorProps {
   flow: Flow;
-  whatsappNumber: string;
+  whatsappNumber?: string;
 }
 
 /**
  * Componente para generar links de WhatsApp que activan flujos automáticamente
+ * Obtiene el código de activación dinámicamente desde el backend
  */
 export default function FlowLinkGenerator({ flow, whatsappNumber }: FlowLinkGeneratorProps) {
   const [copied, setCopied] = useState(false);
+  const [activationCode, setActivationCode] = useState<string>('');
 
-  // Generar código de activación basado en el dominio del flujo
-  const getActivationCode = (): string => {
-    const domainMap: Record<string, string> = {
-      'bookings': 'RESERVA',
-      'purchases': 'COMPRA',
-      'claims': 'RECLAMO',
+  // Obtener número de WhatsApp desde variable de entorno o prop
+  const whatsappNum = whatsappNumber || import.meta.env.VITE_WHATSAPP_NUMBER || '';
+
+  useEffect(() => {
+    const loadActivationCode = async (): Promise<void> => {
+      try {
+        const metadata = await getDomainMetadata(flow.domain);
+        setActivationCode(metadata.activation_code);
+      } catch (error) {
+        console.error('Error loading activation code:', error);
+        // Fallback si falla
+        setActivationCode(`FLOW_${flow.domain.toUpperCase()}_INIT`);
+      }
     };
-    const domainKey = domainMap[flow.domain] || 'RESERVA';
-    return `FLOW_${domainKey}_INIT`;
-  };
+    loadActivationCode();
+  }, [flow.domain]);
 
-  const activationCode = getActivationCode();
-  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(activationCode)}`;
+  const whatsappLink = activationCode && whatsappNum ? `https://wa.me/${whatsappNum}?text=${encodeURIComponent(activationCode)}` : '';
 
   const copyToClipboard = async () => {
     try {
