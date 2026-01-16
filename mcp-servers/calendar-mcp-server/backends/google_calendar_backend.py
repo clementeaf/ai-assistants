@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -14,7 +15,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from calendar_mcp_server.backends.base import CalendarBackend
+from .base import CalendarBackend
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -128,6 +129,8 @@ class GoogleCalendarBackend(CalendarBackend):
         @param customer_id - Customer identifier (for multi-user mode)
         @returns Google Calendar service instance
         """
+        print(f"[GoogleCalendarBackend._get_service] customer_id={customer_id}, has_oauth2_handler={self._oauth2_handler is not None}, has_legacy_service={self._legacy_service is not None}")
+        
         if self._oauth2_handler and customer_id:
             credentials = self._oauth2_handler.get_credentials(customer_id)
             if credentials:
@@ -148,17 +151,36 @@ class GoogleCalendarBackend(CalendarBackend):
         @param customer_id - Customer identifier (for multi-user mode)
         @returns True if available, False otherwise
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             service = self._get_service(customer_id)
             start_dt = self._parse_datetime(start_time_iso)
             end_dt = self._parse_datetime(end_time_iso)
+            
+            # Convertir a UTC para la consulta a Google Calendar (la API espera UTC)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            else:
+                start_dt = start_dt.astimezone(timezone.utc)
+            
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            else:
+                end_dt = end_dt.astimezone(timezone.utc)
+            
+            time_min_str = self._format_datetime(start_dt)
+            time_max_str = self._format_datetime(end_dt)
+            
+            logger.info(f"check_availability: timeMin={time_min_str}, timeMax={time_max_str}, original_start={start_time_iso}, original_end={end_time_iso}")
 
             events_result = (
                 service.events()
                 .list(
                     calendarId=self._calendar_id,
-                    timeMin=self._format_datetime(start_dt),
-                    timeMax=self._format_datetime(end_dt),
+                    timeMin=time_min_str,
+                    timeMax=time_max_str,
                     singleEvents=True,
                     orderBy="startTime",
                 )
@@ -166,6 +188,12 @@ class GoogleCalendarBackend(CalendarBackend):
             )
 
             events = events_result.get("items", [])
+            logger.info(f"check_availability: found {len(events)} events in time range")
+            for event in events:
+                event_start = event.get("start", {}).get("dateTime", event.get("start", {}).get("date", ""))
+                event_end = event.get("end", {}).get("dateTime", event.get("end", {}).get("date", ""))
+                logger.info(f"check_availability: event found - start={event_start}, end={event_end}, summary={event.get('summary', '')}")
+            
             return len(events) == 0
         except HttpError as e:
             raise ValueError(f"Error checking availability: {e}")
@@ -243,11 +271,11 @@ class GoogleCalendarBackend(CalendarBackend):
             "description": f"Cliente: {customer_name}\nID Cliente: {customer_id}\nID Reserva: {booking_id}",
             "start": {
                 "dateTime": self._format_datetime(start_dt),
-                "timeZone": "UTC",
+                "timeZone": "America/Santiago",
             },
             "end": {
                 "dateTime": self._format_datetime(end_dt),
-                "timeZone": "UTC",
+                "timeZone": "America/Santiago",
             },
             "extendedProperties": {
                 "private": {
@@ -307,8 +335,20 @@ class GoogleCalendarBackend(CalendarBackend):
             start = event["start"].get("dateTime", event["start"].get("date"))
             end = event["end"].get("dateTime", event["end"].get("date"))
 
-            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            # Google Calendar devuelve en UTC, pero necesitamos mantener la hora local de Chile
+            start_dt = self._parse_datetime(start)
+            end_dt = self._parse_datetime(end)
+            
+            # Si el datetime no tiene timezone, asumir que es UTC y convertir a Chile
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            
+            # Convertir a zona horaria de Chile (UTC-3)
+            chile_tz = ZoneInfo("America/Santiago")
+            start_dt = start_dt.astimezone(chile_tz)
+            end_dt = end_dt.astimezone(chile_tz)
 
             return {
                 "booking": {
@@ -355,8 +395,24 @@ class GoogleCalendarBackend(CalendarBackend):
                 start = event["start"].get("dateTime", event["start"].get("date"))
                 end = event["end"].get("dateTime", event["end"].get("date"))
 
-                start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-                end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+                # Google Calendar devuelve en UTC, pero necesitamos mantener la hora local de Chile
+                start_dt = self._parse_datetime(start)
+                end_dt = self._parse_datetime(end)
+                
+                # Si el datetime no tiene timezone, asumir que es UTC y convertir a Chile
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                
+                # Convertir a zona horaria de Chile (UTC-3)
+                chile_tz = ZoneInfo("America/Santiago")
+                start_dt_chile = start_dt.astimezone(chile_tz)
+                end_dt_chile = end_dt.astimezone(chile_tz)
+                
+                # Usar la hora local de Chile para el formato ISO
+                start_dt = start_dt_chile
+                end_dt = end_dt_chile
 
                 bookings.append(
                     {
@@ -419,14 +475,14 @@ class GoogleCalendarBackend(CalendarBackend):
                 start_dt = self._parse_datetime(start_time_iso)
                 event["start"] = {
                     "dateTime": self._format_datetime(start_dt),
-                    "timeZone": "UTC",
+                    "timeZone": "America/Santiago",
                 }
 
             if end_time_iso:
                 end_dt = self._parse_datetime(end_time_iso)
                 event["end"] = {
                     "dateTime": self._format_datetime(end_dt),
-                    "timeZone": "UTC",
+                    "timeZone": "America/Santiago",
                 }
 
             if status:

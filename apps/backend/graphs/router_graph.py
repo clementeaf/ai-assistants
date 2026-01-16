@@ -693,42 +693,63 @@ def _parse_date_and_time(user_text: str) -> tuple[str | None, str | None, str | 
     
     # Extraer hora (solo si ya tenemos fecha)
     if date_iso:
-        # Patrones: 18 horas, 19:00, 2 PM, 10 AM, 18-20 horas
+        # IMPORTANTE: Orden de patrones es crítico - más específicos primero
+        # Patrones: 18 horas, 19:00, 2 PM, 10 AM, 9:30 AM, 18-20 horas
         time_patterns = [
+            (r"(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)", "ampm_with_minutes"),  # 9:30 AM, 2:15 PM (MÁS ESPECÍFICO - PRIMERO)
             (r"(\d{1,2})\s*-\s*(\d{1,2})\s*(?:horas|hs|h)", "range_hours"),  # Rango: 18-20 horas
-            (r"(\d{1,2})\s*(?:horas|hs|h)", "single_hour"),  # 18 horas
             (r"(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?", "time_with_minutes"),  # 18:00 o 18:00-20:00
+            (r"(\d{1,2})\s*(?:horas|hs|h)", "single_hour"),  # 18 horas
             (r"(\d{1,2})\s*(AM|PM|am|pm)", "ampm"),  # 2 PM, 10 AM
         ]
         
         for pattern, pattern_type in time_patterns:
             match = re.search(pattern, user_text, re.IGNORECASE)
             if match:
-                if pattern_type == "ampm":  # Formato AM/PM
+                if pattern_type == "ampm_with_minutes":  # Formato 9:30 AM
+                    hour = int(match.group(1))
+                    minute = int(match.group(2))
+                    period = match.group(3).upper()
+                    if period == "PM" and hour != 12:
+                        hour += 12
+                    elif period == "AM" and hour == 12:
+                        hour = 0
+                    # Usar zona horaria de Chile (UTC-3)
+                    start_time_iso = f"{date_iso}T{hour:02d}:{minute:02d}:00-03:00"
+                    # Calcular hora de fin (1 hora después por defecto)
+                    end_hour = hour + 1
+                    if end_hour >= 24:
+                        end_hour = 0
+                    end_time_iso = f"{date_iso}T{end_hour:02d}:{minute:02d}:00-03:00"
+                elif pattern_type == "ampm":  # Formato AM/PM sin minutos
                     hour = int(match.group(1))
                     period = match.group(2).upper()
                     if period == "PM" and hour != 12:
                         hour += 12
                     elif period == "AM" and hour == 12:
                         hour = 0
-                    start_time_iso = f"{date_iso}T{hour:02d}:00:00Z"
+                    # Usar zona horaria de Chile (UTC-3)
+                    start_time_iso = f"{date_iso}T{hour:02d}:00:00-03:00"
                 elif pattern_type == "time_with_minutes":  # Formato 18:00
                     hour = int(match.group(1))
                     minute = int(match.group(2))
-                    start_time_iso = f"{date_iso}T{hour:02d}:{minute:02d}:00Z"
+                    # Usar zona horaria de Chile (UTC-3)
+                    start_time_iso = f"{date_iso}T{hour:02d}:{minute:02d}:00-03:00"
                     # Rango si existe (grupos 3 y 4)
                     if match.lastindex and match.lastindex >= 4 and match.group(3) and match.group(4):
                         end_hour = int(match.group(3))
                         end_minute = int(match.group(4))
-                        end_time_iso = f"{date_iso}T{end_hour:02d}:{end_minute:02d}:00Z"
+                        end_time_iso = f"{date_iso}T{end_hour:02d}:{end_minute:02d}:00-03:00"
                 elif pattern_type == "range_hours":  # Rango: 18-20 horas
                     start_hour = int(match.group(1))
                     end_hour = int(match.group(2))
-                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00Z"
-                    end_time_iso = f"{date_iso}T{end_hour:02d}:00:00Z"
+                    # Usar zona horaria de Chile (UTC-3)
+                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00-03:00"
+                    end_time_iso = f"{date_iso}T{end_hour:02d}:00:00-03:00"
                 else:  # Formato 18 horas (single)
                     start_hour = int(match.group(1))
-                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00Z"
+                    # Usar zona horaria de Chile (UTC-3)
+                    start_time_iso = f"{date_iso}T{start_hour:02d}:00:00-03:00"
                 break
     
     return (date_iso, start_time_iso, end_time_iso)
@@ -878,7 +899,7 @@ def bookings_node(state: GraphState) -> GraphState:
                             "response_text": "Necesito la fecha para consultar disponibilidad. ¿Qué fecha te interesa? (formato: YYYY-MM-DD)",
                             "conversation": conversation,
                         }
-                    slots_out = get_available_slots(GetAvailableSlotsInput(date_iso=date_iso))
+                    slots_out = get_available_slots(GetAvailableSlotsInput(date_iso=date_iso, customer_id=customer_id))
                     if slots_out.error_code is not None:
                         return {
                             **state,
@@ -915,7 +936,7 @@ def bookings_node(state: GraphState) -> GraphState:
                         }
                     availability_out = check_availability(
                         CheckAvailabilityInput(
-                            date_iso=date_iso, start_time_iso=start_time_iso, end_time_iso=end_time_iso
+                            date_iso=date_iso, start_time_iso=start_time_iso, end_time_iso=end_time_iso, customer_id=customer_id
                         )
                     )
                     if availability_out.error_code is not None:
@@ -1609,71 +1630,149 @@ def autonomous_node(state: GraphState) -> GraphState:
         logger.warning("autonomous.planner.not_available")
         return unknown_node(state)
 
-    # Step 1: Saludo inicial - preguntar directamente por fecha y hora
+    # Step 0: RECUERDO - Verificar si es cliente recurrente (nueva conversación pero customer_id conocido)
     is_first = _is_first_interaction(conversation)
-    logger.info("autonomous.first_interaction", is_first=is_first, user_text=user_text)
+    is_recurring_customer = False
+    previous_bookings_count = 0
+    previous_bookings_summary = ""
+    
+    # Si es primera interacción Y tenemos customer_id, verificar si es cliente recurrente
+    if is_first and customer_id:
+        # 1. Verificar si hay nombre en customer_memory (memoria a largo plazo)
+        memory_name = conversation.customer_memory.get("customer_name")
+        if memory_name and not conversation.customer_name:
+            conversation = conversation.model_copy(update={"customer_name": memory_name})
+            logger.info("autonomous.memory.name_loaded", name=memory_name)
+            is_recurring_customer = True
+        
+        # 2. Verificar reservas previas en la bitácora
+        try:
+            bookings_result = list_bookings(ListBookingsInput(customer_id=customer_id))
+            if bookings_result.error_code is None and bookings_result.bookings:
+                previous_bookings_count = len(bookings_result.bookings)
+                # Obtener nombre de la primera reserva si no lo tenemos
+                if not conversation.customer_name and bookings_result.bookings[0].customer_name:
+                    conversation = conversation.model_copy(update={"customer_name": bookings_result.bookings[0].customer_name})
+                    logger.info("autonomous.memory.name_from_booking", name=bookings_result.bookings[0].customer_name)
+                
+                # Crear resumen de reservas previas (últimas 3)
+                recent_bookings = bookings_result.bookings[:3]
+                booking_lines = []
+                for booking in recent_bookings:
+                    date_str = booking.date_iso
+                    time_str = booking.start_time_iso.split("T")[1].split(":")[0:2] if "T" in booking.start_time_iso else ""
+                    status_str = booking.status
+                    booking_lines.append(f"- {date_str} a las {':'.join(time_str)} ({status_str})")
+                
+                if booking_lines:
+                    previous_bookings_summary = "\n".join(booking_lines)
+                    is_recurring_customer = True
+                    logger.info("autonomous.memory.previous_bookings_found", count=previous_bookings_count)
+        except Exception as e:
+            logger.warning("autonomous.memory.booking_check_failed", error=str(e))
+    
+    logger.info("autonomous.first_interaction", is_first=is_first, is_recurring=is_recurring_customer, 
+                has_name=bool(conversation.customer_name), previous_bookings=previous_bookings_count)
+    
+    # Step 1: Verificar si es primera interacción
     if is_first:
-        format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
-        if conversation.customer_name:
-            greeting = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
+        # Intentar extraer nombre del mensaje antes de mostrar saludo
+        name = _extract_name_from_text(user_text)
+        if name is not None:
+            # El usuario ya proporcionó nombre, guardarlo y continuar
+            conversation = conversation.model_copy(update={"customer_name": name})
+            logger.info("autonomous.name_extracted_in_first", name=name)
+            # Continuar con el flujo normal (no retornar aquí)
+        elif not conversation.customer_name:
+            # No hay nombre y no se pudo extraer - PRIORIZAR preguntar por el nombre
+            greeting = "¡Hola! Buenos días, soy el Asistente IA. Para comenzar, ¿podrías decirme tu nombre completo?"
+            logger.info("autonomous.greeting.asking_name", greeting=greeting)
+            return {**state, "response_text": greeting, "conversation": conversation}
         else:
-            greeting = f"¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
-        logger.info("autonomous.greeting", greeting=greeting)
-        return {**state, "response_text": greeting, "conversation": conversation}
+            # Ya hay nombre (de memoria o BD) - saludo personalizado según si es recurrente
+            format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
+            
+            if is_recurring_customer and previous_bookings_count > 0:
+                # Cliente recurrente con reservas previas - saludo más personalizado
+                greeting = f"¡Hola {conversation.customer_name}! Me alegra verte de nuevo. Veo que ya has realizado {previous_bookings_count} reserva{'s' if previous_bookings_count > 1 else ''} anterior{'es' if previous_bookings_count > 1 else ''}. ¿Qué fecha y hora quisieras consultar para tu próxima reserva? {format_message}"
+            else:
+                # Cliente conocido pero sin reservas previas
+                greeting = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
+            
+            logger.info("autonomous.greeting.asking_date_time", greeting=greeting, is_recurring=is_recurring_customer)
+            return {**state, "response_text": greeting, "conversation": conversation}
 
-    # Step 2: Detectar saludos comunes ANTES de procesar nombre
-    # Si el usuario solo dice un saludo, responder siempre con el mensaje completo
+    # Step 2: Detección de saludos comunes (después de la primera interacción)
     text_lower = user_text.lower().strip()
     saludos_comunes = {"hola", "hi", "hello", "buenos días", "buenos dias", "buenas tardes", "buenas noches"}
     if text_lower in saludos_comunes:
+        # Si NO hay nombre, PRIORIZAR preguntar por el nombre
+        if not conversation.customer_name:
+            response = "¡Hola! Buenos días, soy el Asistente IA. Para comenzar, ¿podrías decirme tu nombre completo?"
+            logger.info("autonomous.saludo_detectado.asking_name", user_text=user_text, response=response)
+            return {**state, "response_text": response, "conversation": conversation}
+        # Si YA hay nombre, preguntar por fecha y hora
         format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
-        if conversation.customer_name:
-            response = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
-        else:
-            response = f"¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
-        logger.info("autonomous.saludo_detectado", user_text=user_text, response=response)
+        response = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar? {format_message}"
+        logger.info("autonomous.saludo_detectado.asking_date_time", user_text=user_text, response=response)
         return {**state, "response_text": response, "conversation": conversation}
 
-    # Step 3: Capturar nombre del usuario si no lo tenemos o si se proporciona un nuevo nombre
-    # Intentar extraer nombre del texto
+    # Step 3: Capturar nombre del usuario (PRIORIDAD MÁXIMA - ANTES de procesar fecha/hora)
+    # SIEMPRE verificar si tenemos nombre. Si no lo tenemos, pedirlo ANTES de procesar fecha/hora
     name = _extract_name_from_text(user_text)
     
-    # Si no tenemos nombre y se extrajo uno válido, guardarlo
+    # Si no tenemos nombre en la base de datos
     if conversation.customer_name is None:
         if name is not None:
+            # Se extrajo un nombre válido, guardarlo
             conversation = conversation.model_copy(update={"customer_name": name})
-            response = f"Mucho gusto, {name}. ¿En qué puedo ayudarte hoy?"
+            logger.info("autonomous.name_extracted", name=name)
+            # Continuar con el flujo para procesar también fecha/hora si está presente
+        else:
+            # No se pudo extraer nombre y no hay nombre en BD - PRIORIZAR pedir nombre
+            # NO procesar fecha/hora hasta tener el nombre
+            response = "Por favor, decime tu nombre completo para continuar."
+            logger.info("autonomous.asking_name", user_text=user_text)
             return {**state, "response_text": response, "conversation": conversation}
-        response = "Por favor, decime tu nombre para continuar."
-        return {**state, "response_text": response, "conversation": conversation}
     
-    # Si ya tenemos nombre pero se proporciona uno nuevo, actualizarlo
-    if name is not None and name.lower() != conversation.customer_name.lower():
-        conversation = conversation.model_copy(update={"customer_name": name})
-        # Continuar con el flujo normal (no retornar aquí, dejar que el planner procese)
-
-    # Step 3: Extraer fecha y hora del texto si está presente (antes de llamar al planner)
-    # Esto ayuda al planner a tener contexto de la fecha y hora mencionada
+    # Step 4: Extraer fecha y hora del texto si está presente (SOLO si ya tenemos nombre)
     parsed_date, parsed_start_time, parsed_end_time = _parse_date_and_time(user_text)
     extracted_date = parsed_date
     user_mentions_date = parsed_date is not None
+    user_mentions_time = parsed_start_time is not None
     
     # Guardar la fecha y hora en la conversación si se encontraron
     if extracted_date:
         if conversation.requested_booking_date != extracted_date:
             conversation = conversation.model_copy(update={"requested_booking_date": extracted_date})
         if parsed_start_time and conversation.requested_booking_start_time != parsed_start_time:
+            logger.info("autonomous.parsing.start_time", parsed=parsed_start_time, previous=conversation.requested_booking_start_time)
             conversation = conversation.model_copy(update={"requested_booking_start_time": parsed_start_time})
         if parsed_end_time and conversation.requested_booking_end_time != parsed_end_time:
+            logger.info("autonomous.parsing.end_time", parsed=parsed_end_time, previous=conversation.requested_booking_end_time)
             conversation = conversation.model_copy(update={"requested_booking_end_time": parsed_end_time})
     
     # Detectar si el usuario está preguntando sobre disponibilidad/horarios
     availability_keywords = ["horarios", "disponibilidad", "disponible", "slots", "turnos", "agenda", "qué horas", "qué horarios"]
     user_asks_availability = any(keyword in user_text.lower() for keyword in availability_keywords)
     
-    # Solo usar fecha y hora guardadas si:
-    # 1. El usuario menciona una fecha en su mensaje actual, O
-    # 2. El usuario está preguntando explícitamente sobre disponibilidad/horarios
+    # Detectar si el usuario está confirmando una reserva
+    confirmation_keywords = ["sí", "si", "confirmo", "confirmar", "ok", "okay", "de acuerdo", "perfecto", "vamos", "adelante"]
+    user_confirms = any(keyword in user_text.lower() for keyword in confirmation_keywords)
+    
+    # Si se extrajo nombre y no hay fecha/hora, preguntar por fecha y hora
+    if conversation.customer_name and name is not None and not user_mentions_date and not user_mentions_time:
+        format_message = "Formato esperado: día/mes hora o rango horario (se tomará en cuenta el año presente). Ejemplos: 15/01 18 horas, 15/01 2 PM, 15/01 18-20 horas"
+        response = f"Mucho gusto, {conversation.customer_name}. ¿Qué fecha y hora quisieras consultar para reservar? {format_message}"
+        logger.info("autonomous.name_extracted.asking_date_time", name=conversation.customer_name, response=response)
+        return {**state, "response_text": response, "conversation": conversation}
+    
+    # Si ya tenemos nombre pero se proporciona uno nuevo, actualizarlo
+    if name is not None and conversation.customer_name and name.lower() != conversation.customer_name.lower():
+        conversation = conversation.model_copy(update={"customer_name": name})
+        # Continuar con el flujo normal (no retornar aquí, dejar que el planner procese)
+    
+    # Preparar fecha y hora para pasar al planner
     date_to_pass = None
     start_time_to_pass = None
     end_time_to_pass = None
@@ -1686,10 +1785,17 @@ def autonomous_node(state: GraphState) -> GraphState:
         date_to_pass = conversation.requested_booking_date
         start_time_to_pass = conversation.requested_booking_start_time
         end_time_to_pass = conversation.requested_booking_end_time
+    elif user_confirms and conversation.requested_booking_date and conversation.requested_booking_start_time and conversation.requested_booking_end_time:
+        # Si el usuario confirma y tenemos fecha/hora en el contexto, pasarlas al planner
+        date_to_pass = conversation.requested_booking_date
+        start_time_to_pass = conversation.requested_booking_start_time
+        end_time_to_pass = conversation.requested_booking_end_time
+        logger.info("autonomous.user_confirms_with_context", date=date_to_pass, start_time=start_time_to_pass, end_time=end_time_to_pass)
     # Si no se cumple ninguna condición, no pasar fecha/hora (None)
 
-    # Step 5: Usar planner para generar plan
-    logger.info("autonomous.llamando_planner", user_text=user_text, customer_name=conversation.customer_name, date=date_to_pass)
+    # Step 5: Usar planner para generar plan (incluir contexto de reservas previas)
+    logger.info("autonomous.llamando_planner", user_text=user_text, customer_name=conversation.customer_name, 
+                date=date_to_pass, is_recurring=is_recurring_customer, previous_bookings=previous_bookings_count)
     plan = planner.plan(
         user_text=user_text,
         customer_id=customer_id,
@@ -1697,6 +1803,8 @@ def autonomous_node(state: GraphState) -> GraphState:
         requested_booking_date=date_to_pass,
         requested_booking_start_time=start_time_to_pass,
         requested_booking_end_time=end_time_to_pass,
+        previous_bookings_summary=previous_bookings_summary if previous_bookings_summary else None,
+        is_recurring_customer=is_recurring_customer,
     )
 
     if plan is None or not plan.actions:
@@ -1727,7 +1835,7 @@ def autonomous_node(state: GraphState) -> GraphState:
                         "response_text": "Necesito la fecha para consultar disponibilidad. ¿Qué fecha te interesa?",
                         "conversation": conversation,
                     }
-                slots_out = get_available_slots(GetAvailableSlotsInput(date_iso=date_iso))
+                slots_out = get_available_slots(GetAvailableSlotsInput(date_iso=date_iso, customer_id=customer_id))
                 if slots_out.error_code is not None:
                     return {
                         **state,
@@ -1764,9 +1872,10 @@ def autonomous_node(state: GraphState) -> GraphState:
                     }
                 availability_out = check_availability(
                     CheckAvailabilityInput(
-                        date_iso=date_iso, start_time_iso=start_time_iso, end_time_iso=end_time_iso
+                        date_iso=date_iso, start_time_iso=start_time_iso, end_time_iso=end_time_iso, customer_id=customer_id
                     )
                 )
+                logger.info("autonomous.check_availability", date_iso=date_iso, customer_id=customer_id, available=availability_out.available)
                 if availability_out.error_code is not None:
                     return {
                         **state,
@@ -1812,6 +1921,28 @@ def autonomous_node(state: GraphState) -> GraphState:
                         "response_text": "Faltan datos para crear la reserva. Necesito fecha, horario de inicio y fin.",
                         "conversation": conversation,
                     }
+                
+                # VERIFICAR DISPONIBILIDAD ANTES DE CREAR LA RESERVA
+                availability_out = check_availability(
+                    CheckAvailabilityInput(
+                        date_iso=booking_date, start_time_iso=booking_start, end_time_iso=booking_end, customer_id=customer_id
+                    )
+                )
+                if availability_out.error_code is not None:
+                    return {
+                        **state,
+                        "response_text": "No pude verificar la disponibilidad en este momento. Probá de nuevo en unos minutos.",
+                        "conversation": conversation,
+                    }
+                if not availability_out.available:
+                    start = booking_start.split("T")[1].split(":")[:2]
+                    end = booking_end.split("T")[1].split(":")[:2]
+                    return {
+                        **state,
+                        "response_text": f"Lo siento, el horario del {booking_date} de {':'.join(start)} a {':'.join(end)} ya no está disponible. Por favor, consultá otros horarios.",
+                        "conversation": conversation,
+                    }
+                
                 booking_out = create_booking(
                     CreateBookingInput(
                         customer_id=customer_id,
