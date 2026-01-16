@@ -87,10 +87,14 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
         conversation = state["conversation"]
         user_text = state["user_text"]
         
-        # 0. Si el modo autónomo está habilitado, siempre usar autonomous
+        # 0. Si el modo autónomo está habilitado, SIEMPRE usar autonomous (prioridad máxima)
         autonomous_cfg = load_autonomous_config()
         if autonomous_cfg.enabled:
-            return {**state, "domain": "autonomous", "conversation": conversation}
+            logger = get_logger()
+            logger.info("autonomous.routing", enabled=True, user_text=user_text[:50])
+            # Limpiar routed_domain para forzar modo autónomo
+            updated_conversation = conversation.model_copy(update={"routed_domain": None})
+            return {**state, "domain": "autonomous", "conversation": updated_conversation}
         
         # 1. Detectar códigos de activación de flujo o menú (FLOW_RESERVA_INIT, MENU_INIT, etc)
         flow_name, flow_domain, is_menu = _detect_flow_activation_code(user_text)
@@ -151,6 +155,7 @@ def _make_route_node(router_fn: RouterFn) -> Callable[[GraphState], GraphState]:
                 pass
         
         # Si ya hay un dominio activo y el usuario está en medio de un flujo, mantener el dominio
+        # PERO: Si el modo autónomo está habilitado, siempre usar autonomous (ya se verificó arriba)
         if conversation.routed_domain == "bookings":
             # Si ya tiene nombre o fecha solicitada, mantener bookings
             if conversation.customer_name is not None or conversation.requested_booking_date is not None:
@@ -1513,15 +1518,30 @@ def autonomous_node(state: GraphState) -> GraphState:
         logger.warning("autonomous.planner.not_available")
         return unknown_node(state)
 
-    # Step 1: Saludo inicial con nombre si está disponible
-    if _is_first_interaction(conversation):
+    # Step 1: Saludo inicial - preguntar directamente por fecha y hora
+    is_first = _is_first_interaction(conversation)
+    logger.info("autonomous.first_interaction", is_first=is_first, user_text=user_text)
+    if is_first:
         if conversation.customer_name:
-            greeting = f"¡Hola {conversation.customer_name}! Soy tu asistente de reservas. ¿En qué puedo ayudarte hoy?"
+            greeting = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
         else:
-            greeting = "¡Hola! Soy tu asistente de reservas. ¿Cómo te llamás?"
+            greeting = "¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+        logger.info("autonomous.greeting", greeting=greeting)
         return {**state, "response_text": greeting, "conversation": conversation}
 
-    # Step 2: Capturar nombre del usuario si no lo tenemos o si se proporciona un nuevo nombre
+    # Step 2: Detectar saludos comunes ANTES de procesar nombre
+    # Si el usuario solo dice un saludo, responder siempre con el mensaje completo
+    text_lower = user_text.lower().strip()
+    saludos_comunes = {"hola", "hi", "hello", "buenos días", "buenos dias", "buenas tardes", "buenas noches"}
+    if text_lower in saludos_comunes:
+        if conversation.customer_name:
+            response = f"¡Hola {conversation.customer_name}! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+        else:
+            response = "¡Hola! Buenos días, soy el Asistente IA, ¿qué fecha y hora quisieras consultar para reservar?"
+        logger.info("autonomous.saludo_detectado", user_text=user_text, response=response)
+        return {**state, "response_text": response, "conversation": conversation}
+
+    # Step 3: Capturar nombre del usuario si no lo tenemos o si se proporciona un nuevo nombre
     # Intentar extraer nombre del texto
     name = _extract_name_from_text(user_text)
     
@@ -1530,11 +1550,6 @@ def autonomous_node(state: GraphState) -> GraphState:
         if name is not None:
             conversation = conversation.model_copy(update={"customer_name": name})
             response = f"Mucho gusto, {name}. ¿En qué puedo ayudarte hoy?"
-            return {**state, "response_text": response, "conversation": conversation}
-        # Si el texto es solo un saludo común, no pedir nombre todavía
-        text_lower = user_text.lower().strip()
-        if text_lower in {"hola", "hi", "hello", "buenos días", "buenos dias", "buenas tardes", "buenas noches"}:
-            response = "¡Hola! Soy tu asistente de reservas. ¿Cómo te llamás?"
             return {**state, "response_text": response, "conversation": conversation}
         response = "Por favor, decime tu nombre para continuar."
         return {**state, "response_text": response, "conversation": conversation}
@@ -1586,7 +1601,8 @@ def autonomous_node(state: GraphState) -> GraphState:
         date_to_pass = conversation.requested_booking_date
     # Si no se cumple ninguna condición, no pasar fecha (date_to_pass = None)
 
-    # Step 4: Usar planner para generar plan
+    # Step 5: Usar planner para generar plan
+    logger.info("autonomous.llamando_planner", user_text=user_text, customer_name=conversation.customer_name)
     plan = planner.plan(
         user_text=user_text,
         customer_id=customer_id,
@@ -1600,9 +1616,12 @@ def autonomous_node(state: GraphState) -> GraphState:
         logger.warning("autonomous.planner.no_plan")
         return {**state, "response_text": "No pude entender tu solicitud. ¿Podrías reformularla?", "conversation": conversation}
 
-    # Step 5: Ejecutar acciones del plan
+    logger.info("autonomous.plan_generado", actions_count=len(plan.actions), actions=[a.type for a in plan.actions])
+
+    # Step 6: Ejecutar acciones del plan
     for action in plan.actions:
         if action.type == "ask_user":
+            logger.info("autonomous.ask_user", text=action.text)
             return {**state, "response_text": action.text, "conversation": conversation}
 
         if action.type == "tool_call":
