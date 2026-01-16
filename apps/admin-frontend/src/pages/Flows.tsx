@@ -145,29 +145,6 @@ function Flows() {
   };
 
   /**
-   * Maneja la actualización de reglas de validación de una etapa
-   * @param stageId - ID de la etapa
-   * @param validationRules - Nuevas reglas de validación
-   */
-  const handleUpdateStageRules = async (stageId: string, validationRules: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      await updateStage({
-        stage_id: stageId,
-        validation_rules: validationRules,
-      });
-      if (selectedFlow) {
-        await loadStages(selectedFlow.flow_id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar reglas');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
    * Maneja la eliminación de una etapa
    * @param stageId - ID de la etapa a eliminar
    */
