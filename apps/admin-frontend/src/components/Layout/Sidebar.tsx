@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, GitBranch, Calendar as CalendarIcon, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, GitBranch, Calendar as CalendarIcon, LayoutDashboard, Users } from 'lucide-react';
 
 /**
  * Componente de barra lateral con navegación moderna
@@ -12,6 +12,7 @@ function Sidebar() {
     { path: '/', label: 'Chat', icon: MessageSquare },
     { path: '/flujos', label: 'Flujos', icon: GitBranch },
     { path: '/calendario', label: 'Calendario', icon: CalendarIcon },
+    { path: '/clientes', label: 'Clientes', icon: Users },
   ];
 
   const isActive = (path: string): boolean => {

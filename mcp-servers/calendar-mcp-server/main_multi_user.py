@@ -6,17 +6,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from calendar_mcp_server.backends import SQLiteBackend
-from calendar_mcp_server.oauth2_handler import OAuth2Handler
-from calendar_mcp_server.token_store import TokenStore
+# Cargar variables de entorno desde .env
+load_dotenv()
+
+from backends import SQLiteBackend
+from oauth2_handler import OAuth2Handler
+from token_store import TokenStore
 
 try:
-    from calendar_mcp_server.backends import GoogleCalendarBackend
+    from backends import GoogleCalendarBackend
 except ImportError:
     GoogleCalendarBackend = None
 
@@ -112,9 +116,16 @@ def get_backend():
 @app.on_event("startup")
 def startup_event():
     """Initialize backend on startup."""
-    global backend
+    global backend, oauth2_handler, token_store
     try:
         backend = get_backend()
+        # Asegurar que oauth2_handler y token_store estén disponibles globalmente
+        # (get_backend() los inicializa, pero necesitamos asegurarnos de que estén disponibles)
+        print(f"[STARTUP] Backend initialized: {type(backend).__name__}")
+        if oauth2_handler:
+            print(f"[STARTUP] OAuth2 handler initialized")
+        if token_store:
+            print(f"[STARTUP] Token store initialized")
     except Exception as e:
         print(f"Error initializing backend: {e}")
         raise
@@ -151,11 +162,20 @@ async def oauth_callback(code: str, state: str):
         raise HTTPException(status_code=400, detail="OAuth2 not configured")
 
     try:
+        print(f"[OAUTH CALLBACK] Received code and state: {state[:20]}...")
         result = oauth2_handler.handle_callback(code, state)
-        redirect_url = os.getenv("OAUTH_SUCCESS_REDIRECT_URL", "https://calendar.google.com")
+        customer_id = result.get('customer_id')
+        calendar_email = result.get('calendar_email')
+        print(f"[OAUTH CALLBACK] Success! customer_id={customer_id}, calendar_email={calendar_email}")
+        
+        # Redirigir a una página del frontend que notifique al padre
+        frontend_url = os.getenv("OAUTH_SUCCESS_REDIRECT_URL", "http://localhost:5173/oauth-success")
+        redirect_url = f"{frontend_url}?customer_id={customer_id}&status=success&calendar_email={calendar_email or ''}"
         return RedirectResponse(url=redirect_url)
     except Exception as e:
-        error_url = os.getenv("OAUTH_ERROR_REDIRECT_URL", f"https://calendar.google.com?error={str(e)}")
+        print(f"[OAUTH CALLBACK] ERROR: {str(e)}")
+        frontend_url = os.getenv("OAUTH_ERROR_REDIRECT_URL", "http://localhost:5173/oauth-error")
+        error_url = f"{frontend_url}?error={str(e)}"
         return RedirectResponse(url=error_url)
 
 
@@ -194,11 +214,14 @@ async def oauth_disconnect(request: OAuthDisconnectRequest):
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: MCPRequest):
+async def mcp_endpoint(request: MCPRequest, x_customer_id: str | None = Header(None, alias="X-Customer-Id")):
     """Handle MCP JSON-RPC requests."""
-    global backend
+    global backend, oauth2_handler
     if backend is None:
         backend = get_backend()
+    # Asegurar que oauth2_handler esté disponible si el backend lo necesita
+    if hasattr(backend, '_oauth2_handler') and backend._oauth2_handler and not oauth2_handler:
+        oauth2_handler = backend._oauth2_handler
 
     method = request.method
     params = request.params or {}
@@ -208,7 +231,11 @@ async def mcp_endpoint(request: MCPRequest):
             tool_name = params.get("name")
             arguments = params.get("arguments", {})
             
-            customer_id = arguments.get("customer_id")
+            # customer_id puede venir del header X-Customer-Id o de los arguments
+            customer_id = x_customer_id or arguments.get("customer_id")
+            
+            # Debug: imprimir customer_id recibido
+            print(f"[MCP] Tool: {tool_name}, customer_id: {customer_id}, x_customer_id: {x_customer_id}")
 
             if tool_name == "check_availability":
                 result = backend.check_availability(

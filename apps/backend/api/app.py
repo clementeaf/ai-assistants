@@ -551,14 +551,14 @@ def create_app() -> FastAPI:
     def v1_delete_memory(
         auth: AuthContext = Depends(require_auth),
         x_customer_id: str | None = Header(default=None),
-    ) -> None:
+    ) -> Response:
         """Delete long-term memory for a customer (forget)."""
         _bind_auth_context(auth)
         _enforce_rate_limit(auth)
         if x_customer_id is None or x_customer_id.strip() == "":
             raise HTTPException(status_code=400, detail="Missing X-Customer-Id")
         memory_store.delete(project_id=auth.project_id, customer_id=x_customer_id)
-        return None
+        return Response(status_code=204)
 
     @v1.post("/channels/whatsapp/inbound", response_model=SendMessageResponse)
     def v1_whatsapp_inbound(
@@ -644,7 +644,12 @@ def create_app() -> FastAPI:
             response_text=result.response_text,
         )
 
+    # Importar y configurar router de customer calendars
+    from ai_assistants.api.customer_calendars import router as customer_calendars_router, set_memory_store
+    set_memory_store(memory_store)
+    
     app.include_router(v1)
+    app.include_router(customer_calendars_router)
     if _is_legacy_routes_enabled():
         app.include_router(legacy)
 

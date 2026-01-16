@@ -75,17 +75,26 @@ class AutonomousPlanner:
         requested_booking_date: str | None = None,
         requested_booking_start_time: str | None = None,
         requested_booking_end_time: str | None = None,
+        previous_bookings_summary: str | None = None,
+        is_recurring_customer: bool = False,
     ) -> PlannerOutput | None:
+        context = {
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "requested_booking_date": requested_booking_date,
+            "requested_booking_start_time": requested_booking_start_time,
+            "requested_booking_end_time": requested_booking_end_time,
+        }
+        
+        # Agregar contexto de reservas previas si existe
+        if is_recurring_customer and previous_bookings_summary:
+            context["previous_bookings"] = previous_bookings_summary
+            context["is_recurring_customer"] = True
+        
         user = json.dumps(
             {
                 "user_text": user_text,
-                "context": {
-                    "customer_id": customer_id,
-                    "customer_name": customer_name,
-                    "requested_booking_date": requested_booking_date,
-                    "requested_booking_start_time": requested_booking_start_time,
-                    "requested_booking_end_time": requested_booking_end_time,
-                },
+                "context": context,
             },
             ensure_ascii=False,
         )

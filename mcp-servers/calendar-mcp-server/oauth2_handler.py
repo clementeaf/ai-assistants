@@ -12,7 +12,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 
-from calendar_mcp_server.token_store import TokenStore
+from token_store import TokenStore
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -49,6 +49,14 @@ class OAuth2Handler:
         state = f"{customer_id}-{secrets.token_urlsafe(32)}"
         self._state_store[state] = customer_id
 
+        # Google agrega scopes adicionales automáticamente (openid, userinfo, etc.)
+        # Incluimos estos scopes desde el inicio para evitar el error "Scope has changed"
+        extended_scopes = SCOPES + [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ]
+
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -59,7 +67,7 @@ class OAuth2Handler:
                     "redirect_uris": [self._redirect_uri],
                 }
             },
-            scopes=SCOPES,
+            scopes=extended_scopes,
         )
         flow.redirect_uri = self._redirect_uri
 
@@ -86,6 +94,14 @@ class OAuth2Handler:
         if not customer_id:
             raise ValueError("Invalid state parameter")
 
+        # Google agrega scopes adicionales automáticamente (openid, userinfo, etc.)
+        # Incluimos estos scopes desde el inicio para evitar el error "Scope has changed"
+        extended_scopes = SCOPES + [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ]
+        
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -96,7 +112,7 @@ class OAuth2Handler:
                     "redirect_uris": [self._redirect_uri],
                 }
             },
-            scopes=SCOPES,
+            scopes=extended_scopes,
         )
         flow.redirect_uri = self._redirect_uri
 
@@ -145,25 +161,43 @@ class OAuth2Handler:
         if tokens is None:
             return None
 
+        # Usar los mismos scopes que se usaron al guardar los tokens
+        # (incluye openid, userinfo.email, userinfo.profile que Google agrega automáticamente)
+        extended_scopes = SCOPES + [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ]
+
         credentials = Credentials(
             token=tokens["access_token"],
             refresh_token=tokens["refresh_token"],
             token_uri="https://oauth2.googleapis.com/token",
             client_id=self._client_id,
             client_secret=self._client_secret,
-            scopes=SCOPES,
+            scopes=extended_scopes,
         )
 
-        if credentials.expired:
-            credentials.refresh(Request())
-            token_expiry = datetime.now(tz=timezone.utc) + timedelta(seconds=credentials.expiry.timestamp() if credentials.expiry else 3600)
-            self._token_store.store_tokens(
-                customer_id=customer_id,
-                access_token=credentials.token,
-                refresh_token=credentials.refresh_token,
-                token_expiry=token_expiry,
-                calendar_email=tokens.get("calendar_email"),
-            )
+        try:
+            # Siempre intentar refrescar si está expirado o si no tiene expiry (token nuevo)
+            if credentials.expired or credentials.expiry is None:
+                print(f"[OAuth2Handler] Refreshing token for {customer_id} (expired={credentials.expired}, expiry={credentials.expiry})")
+                credentials.refresh(Request())
+                token_expiry = datetime.now(tz=timezone.utc) + timedelta(seconds=credentials.expiry.timestamp() if credentials.expiry else 3600)
+                self._token_store.store_tokens(
+                    customer_id=customer_id,
+                    access_token=credentials.token,
+                    refresh_token=credentials.refresh_token,
+                    token_expiry=token_expiry,
+                    calendar_email=tokens.get("calendar_email"),
+                )
+                print(f"[OAuth2Handler] Token refreshed successfully for {customer_id}")
+        except Exception as e:
+            # Si el refresh falla, puede ser que el refresh_token sea inválido
+            # En este caso, retornar None para que el backend maneje el error
+            print(f"[OAuth2Handler] Error refreshing token for {customer_id}: {e}")
+            print(f"[OAuth2Handler] Token details: has_token={bool(credentials.token)}, has_refresh={bool(credentials.refresh_token)}, scopes={credentials.scopes}")
+            raise ValueError(f"Failed to refresh token: {str(e)}")
 
         return credentials
 

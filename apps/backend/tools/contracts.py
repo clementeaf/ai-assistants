@@ -73,6 +73,7 @@ class CheckAvailabilityInput(BaseModel):
     date_iso: str = Field(min_length=1)
     start_time_iso: str = Field(min_length=1)
     end_time_iso: str = Field(min_length=1)
+    customer_id: str | None = None
 
 
 class CheckAvailabilityOutput(BaseModel):
@@ -86,6 +87,7 @@ class GetAvailableSlotsInput(BaseModel):
     """Input contract for getting available booking slots."""
 
     date_iso: str = Field(min_length=1)
+    customer_id: str | None = None
 
 
 class BookingSlotSummary(BaseModel):

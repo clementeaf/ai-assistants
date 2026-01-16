@@ -30,6 +30,7 @@ def check_availability(input_data: CheckAvailabilityInput) -> CheckAvailabilityO
             date_iso=input_data.date_iso,
             start_time_iso=input_data.start_time_iso,
             end_time_iso=input_data.end_time_iso,
+            customer_id=input_data.customer_id,
         )
         return CheckAvailabilityOutput(available=available)
     except (AdapterUnavailableError, AdapterTimeoutError) as exc:
@@ -42,7 +43,7 @@ def get_available_slots(input_data: GetAvailableSlotsInput) -> GetAvailableSlots
     """Get available booking slots for a given date."""
     adapter = get_bookings_adapter()
     try:
-        slots = adapter.get_available_slots(date_iso=input_data.date_iso)
+        slots = adapter.get_available_slots(date_iso=input_data.date_iso, customer_id=input_data.customer_id)
         summaries = [
             BookingSlotSummary(
                 date_iso=slot.date_iso,

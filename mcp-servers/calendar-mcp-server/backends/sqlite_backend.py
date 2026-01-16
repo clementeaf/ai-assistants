@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from calendar_mcp_server.backends.base import CalendarBackend
+from .base import CalendarBackend
 
 
 class SQLiteBackend(CalendarBackend):
