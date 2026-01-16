@@ -73,38 +73,38 @@ function StageCard({
   };
 
   return (
-    <div className="bg-white border-2 border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors">
+    <div className="bg-white border border-gray-200 rounded-lg p-2 hover:border-blue-300 transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-blue-500 text-white rounded-full font-bold text-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-6 h-6 bg-blue-500 text-white rounded-full font-bold text-xs">
             {index + 1}
           </div>
           <div>
-            <h4 className="font-semibold text-gray-800">{stage.stage_name}</h4>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+            <h4 className="text-sm font-semibold text-gray-800">{stage.stage_name}</h4>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
                 {getStageTypeLabel()}
               </span>
               {stage.field_type && (
-                <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
+                <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-800 rounded">
                   {getFieldTypeLabel()}
                 </span>
               )}
               {stage.is_required && (
-                <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded">
+                <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-800 rounded">
                   Requerido
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {index > 0 && (
             <button
               onClick={onMoveUp}
               disabled={loading}
-              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors text-xs"
               title="Mover arriba"
             >
               ↑
@@ -114,7 +114,7 @@ function StageCard({
             <button
               onClick={onMoveDown}
               disabled={loading}
-              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors text-xs"
               title="Mover abajo"
             >
               ↓
@@ -123,7 +123,7 @@ function StageCard({
           <button
             onClick={onDelete}
             disabled={loading}
-            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors text-xs"
             title="Eliminar etapa"
           >
             ×
@@ -133,8 +133,8 @@ function StageCard({
 
       {/* Prompt de la etapa */}
       <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-medium text-gray-700">Prompt de la Etapa</label>
+        <div className="flex justify-between items-center mb-1">
+          <label className="text-xs font-medium text-gray-600">Prompt de la Etapa</label>
           {!isEditingPrompt && (
             <button
               onClick={() => setIsEditingPrompt(true)}
@@ -145,34 +145,34 @@ function StageCard({
           )}
         </div>
         {isEditingPrompt ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <textarea
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              rows={3}
+              className="w-full px-2 py-1.5 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              rows={2}
               placeholder="Texto que dirá el asistente en esta etapa..."
             />
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <button
                 onClick={handleSavePrompt}
                 disabled={loading}
-                className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 disabled:bg-gray-300 transition-colors"
+                className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:bg-gray-300 transition-colors"
               >
                 Guardar
               </button>
               <button
                 onClick={handleCancelPrompt}
                 disabled={loading}
-                className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-300 transition-colors"
+                className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:bg-gray-300 transition-colors"
               >
                 Cancelar
               </button>
             </div>
           </div>
         ) : (
-          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+          <div className="p-1.5 bg-gray-50 rounded border border-gray-200">
+            <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
               {stage.prompt_text || <span className="text-gray-400 italic">Sin prompt configurado</span>}
             </p>
           </div>
