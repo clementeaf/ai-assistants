@@ -69,6 +69,55 @@ class CreateAutomatonTestRequest(BaseModel):
     created_by: str | None = None
 
 
+# Rutas de dominios (deben ir ANTES de la ruta genérica /{automaton_id})
+@router.get("/domains/list")
+def list_domains(
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Obtiene lista de dominios disponibles con su metadata para el frontend."""
+    _bind_auth_context(auth)
+    _enforce_rate_limit(auth)
+    from ai_assistants.automata.registry import get_domains_list
+    domains = get_domains_list()
+    return {"domains": domains, "count": len(domains)}
+
+
+@router.get("/domains/{domain}/tools")
+def get_domain_tools(
+    domain: str,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Obtiene las herramientas disponibles para un dominio específico."""
+    _bind_auth_context(auth)
+    _enforce_rate_limit(auth)
+    from ai_assistants.automata.registry import get_automaton_tools
+    tools = get_automaton_tools(domain)
+    return {"domain": domain, "tools": tools, "count": len(tools)}
+
+
+@router.get("/domains/{domain}/metadata")
+def get_domain_metadata(
+    domain: str,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Obtiene metadata completa de un dominio (nombre, descripción, código de activación, etc.)."""
+    _bind_auth_context(auth)
+    _enforce_rate_limit(auth)
+    from ai_assistants.automata.registry import get_automaton_metadata
+    metadata = get_automaton_metadata(domain)
+    if metadata is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Domain '{domain}' not found")
+    return {
+        "domain": metadata.domain,
+        "display_name": metadata.display_name,
+        "description": metadata.description,
+        "activation_code": metadata.activation_code,
+        "tools": metadata.tools,
+        "is_enabled": metadata.is_enabled,
+    }
+
+
 @router.get("/{automaton_id}")
 def get_automaton(
     automaton_id: str,
@@ -186,54 +235,6 @@ def get_automaton_changes(
         "limit": limit,
     })
     return result
-
-
-@router.get("/domains/list")
-def list_domains(
-    auth: AuthContext = Depends(require_auth),
-) -> dict:
-    """Obtiene lista de dominios disponibles con su metadata para el frontend."""
-    _bind_auth_context(auth)
-    _enforce_rate_limit(auth)
-    from ai_assistants.automata.registry import get_domains_list
-    domains = get_domains_list()
-    return {"domains": domains, "count": len(domains)}
-
-
-@router.get("/domains/{domain}/tools")
-def get_domain_tools(
-    domain: str,
-    auth: AuthContext = Depends(require_auth),
-) -> dict:
-    """Obtiene las herramientas disponibles para un dominio específico."""
-    _bind_auth_context(auth)
-    _enforce_rate_limit(auth)
-    from ai_assistants.automata.registry import get_automaton_tools
-    tools = get_automaton_tools(domain)
-    return {"domain": domain, "tools": tools, "count": len(tools)}
-
-
-@router.get("/domains/{domain}/metadata")
-def get_domain_metadata(
-    domain: str,
-    auth: AuthContext = Depends(require_auth),
-) -> dict:
-    """Obtiene metadata completa de un dominio (nombre, descripción, código de activación, etc.)."""
-    _bind_auth_context(auth)
-    _enforce_rate_limit(auth)
-    from ai_assistants.automata.registry import get_automaton_metadata
-    metadata = get_automaton_metadata(domain)
-    if metadata is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"Domain '{domain}' not found")
-    return {
-        "domain": metadata.domain,
-        "display_name": metadata.display_name,
-        "description": metadata.description,
-        "activation_code": metadata.activation_code,
-        "tools": metadata.tools,
-        "is_enabled": metadata.is_enabled,
-    }
 
 
 # Funciones que serán inyectadas desde app.py
