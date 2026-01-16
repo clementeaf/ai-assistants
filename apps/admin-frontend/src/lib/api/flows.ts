@@ -28,7 +28,7 @@ interface MCPResponse<T = unknown> {
  * @param arguments_ - Argumentos para la herramienta
  * @returns Resultado de la llamada
  */
-async function callFlowMCPTool<T = unknown>(toolName: string, arguments_: Record<string, unknown>): Promise<T> {
+export async function callFlowMCPTool<T = unknown>(toolName: string, arguments_: Record<string, unknown>): Promise<T> {
   const payload: MCPRequest = {
     jsonrpc: '2.0',
     id: Date.now(),
