@@ -274,11 +274,23 @@ function Flows() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full">
+      {/* Header solo cuando NO hay flujo seleccionado */}
+      {!selectedFlow && (
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
+          <h2 className="text-xl font-bold text-slate-800">Gestión de Flujos</h2>
+          <button
+            onClick={() => setShowCreateFlow(true)}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+          >
+            Crear Flujo
+          </button>
+        </header>
+      )}
 
       {/* Mensaje de error */}
       {error && (
-        <div className="p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg">
+        <div className="p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg m-6">
           {error}
         </div>
       )}
@@ -298,7 +310,7 @@ function Flows() {
             onBack={() => setSelectedFlow(null)}
           />
         ) : (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto p-6">
             {loading && flows.length === 0 ? (
               <div className="text-center py-12 text-gray-500">Cargando flujos...</div>
             ) : flows.length === 0 ? (
