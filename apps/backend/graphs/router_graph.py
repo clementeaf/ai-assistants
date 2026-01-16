@@ -786,60 +786,121 @@ def bookings_node(state: GraphState) -> GraphState:
             greeting = "¡Hola! Bienvenido al sistema de reservas.\n¿Cómo te llamás?"
         return {**state, "response_text": greeting, "conversation": updated_conversation}
 
-    # Step 1: Saludo inicial (máximo 2 líneas) si es la primera interacción
-    if _is_first_interaction(conversation):
-        # Consultar módulos del flujo activo para obtener el saludo configurado
-        greeting_text = _get_greeting_from_flow()
+    # Cargar etapas del flujo activo y system_prompt
+    flow_stages = _get_flow_stages_ordered("bookings")
+    system_prompt = _get_system_prompt_from_flow("bookings")
+    
+    # Determinar etapa actual según el estado de la conversación
+    current_stage = _determine_current_stage(flow_stages, conversation) if flow_stages else None
+    
+    # Si hay una etapa pendiente que debe ejecutarse, usarla
+    if current_stage:
+        stage_type = current_stage.get("stage_type")
+        prompt_text = current_stage.get("prompt_text", "")
+        field_name = current_stage.get("field_name")
+        field_type = current_stage.get("field_type")
+        validation_rules = current_stage.get("validation_rules")
         
-        # Personalizar saludo con nombre si está disponible
-        if conversation.customer_name:
-            # Reemplazar "¿Cómo te llamas?" o similar si está en el texto
-            greeting = greeting_text.replace("¿Cómo te llamas?", "").replace("¿Cómo te llamás?", "").strip()
-            if not greeting.endswith(".") and not greeting.endswith("!"):
-                greeting += "."
-            greeting = f"¡Hola {conversation.customer_name}! {greeting}"
-        else:
-            greeting = greeting_text
-        return {**state, "response_text": greeting, "conversation": conversation}
-
-    # Step 2: Capturar nombre del usuario si no lo tenemos
-    # IMPORTANTE: Solo ejecutar este paso si hay un módulo get_name configurado en el flujo
-    # y si realmente no tenemos el nombre
-    if conversation.customer_name is None:
-        # Obtener el módulo get_name del flujo activo (si existe)
-        get_name_stage = _get_name_stage_from_flow()
+        # Etapa greeting: usar su prompt
+        if stage_type == "greeting":
+            greeting_text = prompt_text or "Hola, soy tu asistente de reservas.\n¿Cómo te llamás?"
+            if conversation.customer_name:
+                greeting = greeting_text.replace("¿Cómo te llamas?", "").replace("¿Cómo te llamás?", "").strip()
+                if not greeting.endswith(".") and not greeting.endswith("!"):
+                    greeting += "."
+                greeting = f"¡Hola {conversation.customer_name}! {greeting}"
+            else:
+                greeting = greeting_text
+            return {**state, "response_text": greeting, "conversation": conversation}
         
-        # Si hay módulo get_name configurado, usar su prompt_text
-        if get_name_stage:
-            prompt_text = get_name_stage.get("prompt_text", "Por favor, dime tu nombre completo.")
-            # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
-            text_lower = user_text.lower()
-            if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
-                # El usuario está expresando intención de reservar, no dando su nombre
-                return {**state, "response_text": prompt_text, "conversation": conversation}
+        # Etapa input: usar su prompt y validar respuesta
+        if stage_type == "input" and field_name:
+            # Mapear field_name a campo de conversación
+            field_to_conv: dict[str, str] = {
+                "customer_name": "customer_name",
+                "date_iso": "requested_booking_date",
+                "start_time_iso": "requested_booking_start_time",
+                "end_time_iso": "requested_booking_end_time",
+            }
+            conv_field = field_to_conv.get(field_name)
             
-            name = _extract_name_from_text(user_text)
-            if name is not None:
-                conversation = conversation.model_copy(update={"customer_name": name})
-                response = f"Mucho gusto, {name}. ¿Qué fecha y horario te gustaría reservar?"
-                return {**state, "response_text": response, "conversation": conversation}
+            # Si el usuario ya proporcionó el valor, extraerlo y validar
+            if conv_field:
+                current_value = getattr(conversation, conv_field, None)
+                if current_value is None or (isinstance(current_value, str) and current_value.strip() == ""):
+                    # Extraer valor según field_type
+                    extracted_value = None
+                    
+                    if field_name == "customer_name":
+                        # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
+                        text_lower = user_text.lower()
+                        if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
+                            # El usuario está expresando intención de reservar, no dando su nombre
+                            return {**state, "response_text": prompt_text or "Por favor, dime tu nombre completo.", "conversation": conversation}
+                        extracted_value = _extract_name_from_text(user_text)
+                    
+                    elif field_name == "date_iso":
+                        parsed_date, _, _ = _parse_date_and_time(user_text)
+                        extracted_value = parsed_date
+                    
+                    elif field_name in ("start_time_iso", "end_time_iso"):
+                        _, parsed_start, parsed_end = _parse_date_and_time(user_text)
+                        if field_name == "start_time_iso":
+                            extracted_value = parsed_start
+                        else:
+                            extracted_value = parsed_end
+                    
+                    # Si se extrajo un valor, validar y actualizar conversación
+                    if extracted_value:
+                        # Validar según validation_rules
+                        is_valid, error_message = _validate_stage_input(
+                            extracted_value,
+                            field_type,
+                            validation_rules,
+                        )
+                        
+                        if not is_valid:
+                            # Valor inválido, mostrar error y pedir de nuevo
+                            error_response = error_message or f"El valor proporcionado no es válido. {prompt_text or ''}"
+                            return {**state, "response_text": error_response, "conversation": conversation}
+                        
+                        # Valor válido, actualizar conversación
+                        update_dict = {conv_field: extracted_value}
+                        conversation = conversation.model_copy(update=update_dict)
+                        # Buscar siguiente etapa
+                        next_stage = _determine_current_stage(flow_stages, conversation)
+                        if next_stage and next_stage.get("prompt_text"):
+                            # Hay siguiente etapa, usar su prompt
+                            response = next_stage.get("prompt_text")
+                            return {**state, "response_text": response, "conversation": conversation}
+                        # No hay más etapas pendientes, continuar con planner
+                        # Actualizar state con la conversación actualizada
+                        state = {**state, "conversation": conversation}
+                    else:
+                        # No se pudo extraer el valor, usar el prompt de la etapa
+                        if not prompt_text:
+                            if field_name == "date_iso":
+                                prompt_text = "¿Para qué fecha te gustaría reservar? (formato: día/mes, ejemplo: 15/01)"
+                            elif field_name in ("start_time_iso", "end_time_iso"):
+                                prompt_text = "¿A qué hora? Puedes indicar un horario específico (ej: 18 horas) o un rango (ej: 18-20 horas)"
+                            else:
+                                prompt_text = f"Por favor, proporciona {field_name}"
+                        return {**state, "response_text": prompt_text, "conversation": conversation}
+            
+            # Si no hay mapeo o no se pudo extraer, usar el prompt de la etapa
+            if not prompt_text:
+                if field_name == "date_iso":
+                    prompt_text = "¿Para qué fecha te gustaría reservar? (formato: día/mes, ejemplo: 15/01)"
+                elif field_name in ("start_time_iso", "end_time_iso"):
+                    prompt_text = "¿A qué hora? Puedes indicar un horario específico (ej: 18 horas) o un rango (ej: 18-20 horas)"
+                else:
+                    prompt_text = f"Por favor, proporciona {field_name}"
+            
             return {**state, "response_text": prompt_text, "conversation": conversation}
         
-        # Lógica por defecto si no hay módulo configurado
-        # Verificar si el usuario está mencionando "reserva" o similar (no es un nombre)
-        text_lower = user_text.lower()
-        if any(word in text_lower for word in ("reserva", "reservas", "turno", "agenda", "quiero", "necesito", "deseo")):
-            # El usuario está expresando intención de reservar, no dando su nombre
-            response = "Perfecto, te ayudo con tu reserva. ¿Cómo te llamás?"
-            return {**state, "response_text": response, "conversation": conversation}
-        
-        name = _extract_name_from_text(user_text)
-        if name is not None:
-            conversation = conversation.model_copy(update={"customer_name": name})
-            response = f"Mucho gusto, {name}. ¿Qué fecha y horario te gustaría reservar?"
-            return {**state, "response_text": response, "conversation": conversation}
-        response = "Por favor, decime tu nombre para continuar con la reserva."
-        return {**state, "response_text": response, "conversation": conversation}
+        # Otra etapa: usar su prompt
+        if prompt_text:
+            return {**state, "response_text": prompt_text, "conversation": conversation}
 
     # Check if user is confirming a booking and we have all required data
     if (
@@ -875,8 +936,13 @@ def bookings_node(state: GraphState) -> GraphState:
             return {**state, "response_text": response, "conversation": conversation}
 
     # LLM planner (intelligence-first): propose validated tool calls for ambiguous messages.
+    # El planner ahora recibe las etapas y el system_prompt del flujo para guiar la conversación
     planner = get_bookings_planner()
     if planner is not None:
+        # Actualizar conversation en state si fue modificada
+        if conversation != state["conversation"]:
+            state = {**state, "conversation": conversation}
+        
         plan = planner.plan(
             user_text=user_text,
             customer_id=customer_id,
@@ -884,6 +950,8 @@ def bookings_node(state: GraphState) -> GraphState:
             requested_booking_date=conversation.requested_booking_date,
             requested_booking_start_time=conversation.requested_booking_start_time,
             requested_booking_end_time=conversation.requested_booking_end_time,
+            flow_stages=flow_stages,
+            system_prompt=system_prompt,
         )
         if plan is not None:
             for action in plan.actions:
@@ -1400,6 +1468,206 @@ def _get_name_stage_from_flow() -> dict[str, Any] | None:
     except Exception as exc:
         logger = get_logger()
         logger.error("Unexpected error fetching name stage", error=str(exc), error_type=type(exc).__name__)
+    
+    return None
+
+
+def _validate_stage_input(
+    value: str,
+    field_type: str | None,
+    validation_rules: str | None,
+) -> tuple[bool, str | None]:
+    """
+    Valida un valor de entrada según las reglas de la etapa.
+    @param value - Valor a validar
+    @param field_type - Tipo de campo (date, time, string, etc.)
+    @param validation_rules - Reglas de validación en formato texto
+    @returns (es_válido, mensaje_error) - True si es válido, False y mensaje si no
+    """
+    if not value or not value.strip():
+        return (False, "El valor no puede estar vacío")
+    
+    # Validaciones básicas según field_type
+    if field_type == "date":
+        # Validar formato de fecha ISO
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+            return (False, "La fecha debe estar en formato YYYY-MM-DD")
+    
+    if field_type == "time":
+        # Validar formato de tiempo ISO
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", value):
+            return (False, "La hora debe estar en formato ISO")
+    
+    # Si hay validation_rules, aplicar validaciones adicionales
+    # Por ahora, solo validaciones básicas
+    # TODO: Implementar parser de validation_rules más complejo
+    
+    return (True, None)
+
+
+def _determine_current_stage(
+    stages: list[dict[str, Any]],
+    conversation: ConversationState,
+) -> dict[str, Any] | None:
+    """
+    Determina qué etapa debe ejecutarse según el estado de la conversación.
+    Respetando el orden (stage_order) y verificando qué campos ya están completos.
+    @param stages - Lista de etapas ordenadas por stage_order
+    @param conversation - Estado actual de la conversación
+    @returns La etapa que debe ejecutarse o None si todas están completas
+    """
+    if not stages:
+        return None
+    
+    # Mapear field_name de etapas a campos de conversación
+    field_to_conversation: dict[str, str] = {
+        "customer_name": "customer_name",
+        "date_iso": "requested_booking_date",
+        "start_time_iso": "requested_booking_start_time",
+        "end_time_iso": "requested_booking_end_time",
+    }
+    
+    # Recorrer etapas en orden estricto
+    for stage in stages:
+        stage_type = stage.get("stage_type")
+        field_name = stage.get("field_name")
+        is_required = stage.get("is_required", False)
+        
+        # Etapa greeting: solo si es primera interacción
+        if stage_type == "greeting":
+            if _is_first_interaction(conversation):
+                return stage
+            continue
+        
+        # Etapa input: verificar si el campo ya está completo
+        if stage_type == "input" and field_name:
+            # Mapear field_name a campo de conversación
+            conv_field = field_to_conversation.get(field_name)
+            if conv_field:
+                # Verificar si el campo está vacío
+                field_value = getattr(conversation, conv_field, None)
+                if field_value is None or (isinstance(field_value, str) and field_value.strip() == ""):
+                    # Esta etapa necesita ejecutarse
+                    return stage
+            else:
+                # Campo no mapeado, si es requerido, ejecutarlo
+                if is_required:
+                    return stage
+        
+        # Etapa de otro tipo: si es requerida, ejecutarla
+        if is_required and stage_type not in ("greeting", "input"):
+            # Ejecutar etapas requeridas que no sean greeting/input
+            return stage
+    
+    # Si llegamos aquí, todas las etapas requeridas están completas
+    return None
+
+
+def _get_flow_stages_ordered(domain: str) -> list[dict[str, Any]]:
+    """
+    Obtiene todas las etapas del flujo activo para un dominio, ordenadas por stage_order.
+    Excluye el stage de tipo 'system_prompt'.
+    @param domain - Dominio del flujo (bookings, purchases, claims, etc.)
+    @returns Lista de etapas ordenadas por stage_order
+    """
+    flows = _get_active_flows()
+    active_flow = next((f for f in flows if f.get("domain") == domain and f.get("is_active")), None)
+    
+    if not active_flow:
+        return []
+    
+    try:
+        flow_id = active_flow.get("flow_id")
+        if not flow_id:
+            return []
+        
+        from ai_assistants.config.mcp_config import load_mcp_config
+        
+        mcp_config = load_mcp_config()
+        flow_server_url = mcp_config.booking_flow_server_url
+        client = httpx.Client(timeout=5.0)
+        stages_response = client.post(
+            f"{flow_server_url}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "get_flow_stages", "arguments": {"flow_id": flow_id}},
+            },
+        )
+        if stages_response.status_code == 200:
+            json_response = stages_response.json()
+            if "error" not in json_response or json_response["error"] is None:
+                result = json_response.get("result", {})
+                stages = result.get("stages", [])
+                # Filtrar system_prompt y ordenar por stage_order
+                regular_stages = [
+                    s for s in stages 
+                    if s.get("stage_type") != "system_prompt"
+                ]
+                # Ordenar por stage_order
+                regular_stages.sort(key=lambda x: x.get("stage_order", 999))
+                return regular_stages
+    except (httpx.HTTPError, httpx.TimeoutException, httpx.RequestError) as exc:
+        logger = get_logger()
+        logger.warning("Failed to fetch flow stages", error=str(exc), domain=domain)
+    except Exception as exc:
+        logger = get_logger()
+        logger.error("Unexpected error fetching flow stages", error=str(exc), error_type=type(exc).__name__, domain=domain)
+    
+    return []
+
+
+def _get_system_prompt_from_flow(domain: str) -> str | None:
+    """
+    Obtiene el prompt del sistema desde el flujo activo.
+    @param domain - Dominio del flujo (bookings, purchases, claims, etc.)
+    @returns Texto del system_prompt o None si no existe
+    """
+    flows = _get_active_flows()
+    active_flow = next((f for f in flows if f.get("domain") == domain and f.get("is_active")), None)
+    
+    if not active_flow:
+        return None
+    
+    try:
+        flow_id = active_flow.get("flow_id")
+        if not flow_id:
+            return None
+        
+        from ai_assistants.config.mcp_config import load_mcp_config
+        
+        mcp_config = load_mcp_config()
+        flow_server_url = mcp_config.booking_flow_server_url
+        client = httpx.Client(timeout=5.0)
+        stages_response = client.post(
+            f"{flow_server_url}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "get_flow_stages", "arguments": {"flow_id": flow_id}},
+            },
+        )
+        if stages_response.status_code == 200:
+            json_response = stages_response.json()
+            if "error" not in json_response or json_response["error"] is None:
+                result = json_response.get("result", {})
+                stages = result.get("stages", [])
+                system_prompt_stage = next(
+                    (s for s in stages if s.get("stage_type") == "system_prompt"),
+                    None
+                )
+                if system_prompt_stage and system_prompt_stage.get("prompt_text"):
+                    return system_prompt_stage.get("prompt_text")
+    except (httpx.HTTPError, httpx.TimeoutException, httpx.RequestError) as exc:
+        logger = get_logger()
+        logger.warning("Failed to fetch system prompt from flow", error=str(exc), domain=domain)
+    except Exception as exc:
+        logger = get_logger()
+        logger.error("Unexpected error fetching system prompt", error=str(exc), error_type=type(exc).__name__, domain=domain)
     
     return None
 

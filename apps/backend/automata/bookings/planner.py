@@ -79,22 +79,46 @@ class BookingsPlanner:
         requested_booking_date: str | None = None,
         requested_booking_start_time: str | None = None,
         requested_booking_end_time: str | None = None,
+        flow_stages: list[dict[str, Any]] | None = None,
+        system_prompt: str | None = None,
     ) -> PlannerOutput | None:
+        # Usar system_prompt del flujo si está disponible, sino usar el default
+        system_prompt_to_use = system_prompt if system_prompt else self._system
+        
+        # Construir contexto con información de etapas si está disponible
+        context: dict[str, Any] = {
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "requested_booking_date": requested_booking_date,
+            "requested_booking_start_time": requested_booking_start_time,
+            "requested_booking_end_time": requested_booking_end_time,
+        }
+        
+        # Agregar información de etapas al contexto si está disponible
+        if flow_stages:
+            context["flow_stages"] = [
+                {
+                    "stage_order": stage.get("stage_order"),
+                    "stage_name": stage.get("stage_name"),
+                    "stage_type": stage.get("stage_type"),
+                    "prompt_text": stage.get("prompt_text"),
+                    "field_name": stage.get("field_name"),
+                    "field_type": stage.get("field_type"),
+                    "validation_rules": stage.get("validation_rules"),
+                    "is_required": stage.get("is_required", False),
+                }
+                for stage in flow_stages
+            ]
+        
         user = json.dumps(
             {
                 "user_text": user_text,
-                "context": {
-                    "customer_id": customer_id,
-                    "customer_name": customer_name,
-                    "requested_booking_date": requested_booking_date,
-                    "requested_booking_start_time": requested_booking_start_time,
-                    "requested_booking_end_time": requested_booking_end_time,
-                },
+                "context": context,
             },
             ensure_ascii=False,
         )
         try:
-            content = self._client.chat_completion(system=self._system, user=user)
+            content = self._client.chat_completion(system=system_prompt_to_use, user=user)
             parsed = PlannerOutput.model_validate(json.loads(content))
             return parsed
         except (ValueError, ValidationError) as exc:
