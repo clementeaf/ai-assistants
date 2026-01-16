@@ -71,7 +71,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
     const baseUrl = apiBaseUrl.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '');
     const url = new URL(`${protocol}//${baseUrl}/v1/ws/conversations/${conversationId}`);
 
@@ -107,9 +107,11 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     try {
       const url = getWebSocketUrl();
+      console.log('[WebSocket] Intentando conectar a:', url);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
+        console.log('[WebSocket] Conexión establecida exitosamente');
         hasConnectedRef.current = true;
         setIsConnected(true);
         setIsConnecting(false);
@@ -132,16 +134,18 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       };
 
       ws.onerror = (event) => {
+        console.error('[WebSocket] Error en conexión:', event);
         setIsConnecting(false);
-        const currentApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const currentApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
         const errorMessage = `WebSocket connection error. Verifica que el servidor esté corriendo en ${currentApiBaseUrl}`;
         setError(errorMessage);
-        console.error('WebSocket error:', event);
-        console.error('WebSocket URL intentada:', url);
+        console.error('[WebSocket] URL intentada:', url);
+        console.error('[WebSocket] Estado del WebSocket:', ws.readyState);
         onErrorRef.current?.(event);
       };
 
       ws.onclose = (event) => {
+        console.log('[WebSocket] Conexión cerrada. Código:', event.code, 'Razón:', event.reason);
         setIsConnected(false);
         setIsConnecting(false);
 
@@ -153,6 +157,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
         // Solo mostrar error si no fue un cierre normal y el componente sigue montado
         if (isMountedRef.current && event.code !== 1000 && event.code !== 1001) {
           const errorMessage = event.reason || `Connection closed (code: ${event.code})`;
+          console.error('[WebSocket] Error al cerrar:', errorMessage);
           setError(errorMessage);
         }
 
