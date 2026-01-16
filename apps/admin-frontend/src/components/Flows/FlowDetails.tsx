@@ -131,7 +131,7 @@ function FlowDetails({
                 : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
             }`}
           >
-            Etapas a Respetar
+            Gestor de etapas
           </button>
         </div>
       </div>
