@@ -57,6 +57,7 @@ function StageModule({
     }
     if (stage.stage_type === 'confirmation') return 'Confirmación';
     if (stage.stage_type === 'action') return 'Acción';
+    if (stage.stage_type === 'system_prompt') return 'Prompt del Sistema LLM';
     return stage.stage_type;
   };
 
@@ -126,14 +127,16 @@ function StageModule({
           <div className="space-y-2">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Asistente:
+                {stage.stage_type === 'system_prompt' ? 'Prompt del Sistema LLM:' : 'Asistente:'}
               </label>
               <textarea
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                rows={3}
-                placeholder="Escribe lo que dirá el asistente..."
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono ${
+                  stage.stage_type === 'system_prompt' ? 'text-xs' : ''
+                }`}
+                rows={stage.stage_type === 'system_prompt' ? 20 : 3}
+                placeholder={stage.stage_type === 'system_prompt' ? 'Prompt completo del sistema LLM...' : 'Escribe lo que dirá el asistente...'}
               />
             </div>
             <div className="flex gap-2">
@@ -157,11 +160,21 @@ function StageModule({
               <span className="text-xs font-semibold text-gray-700">Asistente:</span>
             </div>
             <div
-              className="p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+              className={`p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors ${
+                stage.stage_type === 'system_prompt' ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'
+              }`}
               onClick={() => setIsEditing(true)}
             >
-              {promptText || (
-                <span className="text-gray-400 italic">Click para editar el texto del asistente...</span>
+              {promptText ? (
+                <pre className={`whitespace-pre-wrap text-sm ${stage.stage_type === 'system_prompt' ? 'font-mono text-xs' : ''}`}>
+                  {promptText}
+                </pre>
+              ) : (
+                <span className="text-gray-400 italic">
+                  {stage.stage_type === 'system_prompt' 
+                    ? 'Click para editar el prompt del sistema LLM...' 
+                    : 'Click para editar el texto del asistente...'}
+                </span>
               )}
             </div>
             {getFormatInfo() && (
@@ -172,6 +185,11 @@ function StageModule({
             {stage.stage_type === 'greeting' && (
               <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-1">
                 ℹ️ El sistema obtiene automáticamente el nombre de WhatsApp. Solo se pedirá si no se encuentra.
+              </div>
+            )}
+            {stage.stage_type === 'system_prompt' && (
+              <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                ℹ️ Este es el prompt completo del sistema LLM que se usa para conectar con Google Calendar. Contiene las instrucciones para usar herramientas como get_available_slots, check_availability, create_booking, etc.
               </div>
             )}
           </div>

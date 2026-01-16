@@ -17,6 +17,17 @@ function MainContent() {
       {/* Top Header */}
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10">
         <h2 className="text-xl font-bold text-slate-800">{getPageTitle()}</h2>
+        {location.pathname === '/flujos' && (
+          <button
+            onClick={() => {
+              const event = new CustomEvent('createFlow');
+              window.dispatchEvent(event);
+            }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+          >
+            Crear Flujo
+          </button>
+        )}
       </header>
 
       {/* Page Content Container */}

@@ -94,3 +94,19 @@ class WebSocketMessage(BaseModel):
     error: str | None = Field(default=None, description="Error message if type is 'error'")
     timestamp: str | None = Field(default=None, description="ISO timestamp of the message")
 
+
+class AutomatonAssistantRequest(BaseModel):
+    """Request body for automaton assistant chat."""
+
+    conversation_id: str = Field(min_length=1, description="Unique conversation ID for context")
+    message: str = Field(min_length=1, description="User message to the assistant")
+    automaton_context: dict | None = Field(default=None, description="Complete automaton context including flow, prompt, and stages")
+
+
+class AutomatonAssistantResponse(BaseModel):
+    """Response from automaton assistant chat."""
+
+    response: str = Field(description="Assistant's response message")
+    prompt_generated: bool = Field(default=False, description="Whether a complete prompt was generated")
+    prompt: str | None = Field(default=None, description="Generated system prompt if available")
+

@@ -14,6 +14,7 @@ interface FlowEditorProps {
   onAddModuleConfirm: (moduleType: string) => void;
   showAddModule: boolean;
   onCloseAddModule: () => void;
+  flow?: { flow_id: string; domain: string } | null;
 }
 
 /**
@@ -31,22 +32,118 @@ function FlowEditor({
   onAddModuleConfirm,
   showAddModule,
   onCloseAddModule,
+  flow,
 }: FlowEditorProps) {
+  const [showLinks, setShowLinks] = useState(false);
+
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow">
+    <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
       {/* Header fijo */}
-      <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold">Editor de Flujo: {flowName}</h2>
-        <button
-          onClick={onAddModule}
-          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
-        >
-          + Agregar Módulo
-        </button>
+      <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 gap-2">
+        <h2 className="text-lg font-semibold flex-1">Editor de Flujo: {flowName}</h2>
+        <div className="flex gap-2">
+          {flow && (
+            <button
+              onClick={() => setShowLinks(!showLinks)}
+              className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+              title="Mostrar links de activación"
+            >
+              {showLinks ? 'Ocultar Links' : 'Links'}
+            </button>
+          )}
+          <button
+            onClick={onAddModule}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+          >
+            + Agregar Módulo
+          </button>
+        </div>
       </div>
 
+      {/* Panel de links colapsable */}
+      {showLinks && flow && (
+        <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 p-3">
+          <div className="grid grid-cols-2 gap-3">
+            {/* Link genérico para menú */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-2">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-purple-900 text-xs">Menú de Flujos</h3>
+                <span className="text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">MENU</span>
+              </div>
+              <div className="space-y-1">
+                <div>
+                  <label className="text-xs font-medium text-gray-700">Código:</label>
+                  <code className="block mt-0.5 bg-white px-1.5 py-0.5 rounded border text-xs font-mono">MENU_INIT</code>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700">Link:</label>
+                  <div className="flex gap-1 mt-0.5">
+                    <input
+                      type="text"
+                      value={`https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`}
+                      readOnly
+                      className="flex-1 px-1.5 py-0.5 border rounded text-xs bg-white"
+                    />
+                    <button
+                      onClick={async () => {
+                        const link = `https://wa.me/56959263366?text=${encodeURIComponent('MENU_INIT')}`;
+                        await navigator.clipboard.writeText(link);
+                        alert('Link copiado');
+                      }}
+                      className="px-2 py-0.5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Link específico del flujo */}
+            {flow && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-semibold text-blue-900 text-xs">Link de Activación</h3>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">{flow.domain}</span>
+                </div>
+                <div className="space-y-1">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Código:</label>
+                    <code className="block mt-0.5 bg-white px-1.5 py-0.5 rounded border text-xs font-mono">
+                      {flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT'}
+                    </code>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Link:</label>
+                    <div className="flex gap-1 mt-0.5">
+                      <input
+                        type="text"
+                        value={`https://wa.me/56959263366?text=${encodeURIComponent(flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT')}`}
+                        readOnly
+                        className="flex-1 px-1.5 py-0.5 border rounded text-xs bg-white"
+                      />
+                      <button
+                        onClick={async () => {
+                          const code = flow.domain === 'bookings' ? 'FLOW_RESERVA_INIT' : flow.domain === 'purchases' ? 'FLOW_COMPRA_INIT' : 'FLOW_RECLAMO_INIT';
+                          const link = `https://wa.me/56959263366?text=${encodeURIComponent(code)}`;
+                          await navigator.clipboard.writeText(link);
+                          alert('Link copiado');
+                        }}
+                        className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Contenido con scroll */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {loading && stages.length === 0 ? (
           <div className="text-center py-12 text-gray-500">Cargando módulos...</div>
         ) : stages.length === 0 ? (

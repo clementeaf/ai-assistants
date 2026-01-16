@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from structlog.contextvars import bind_contextvars, clear_contextvars, get_contextvars
 
 from ai_assistants.api.models import (
+    AutomatonAssistantRequest,
+    AutomatonAssistantResponse,
     BaileysInboundResponse,
     BaileysInboundRequest,
     CreateJobResponse,
@@ -547,6 +549,168 @@ def create_app() -> FastAPI:
         mem = memory_store.get(project_id=auth.project_id, customer_id=x_customer_id)
         return CustomerMemoryResponse(customer_id=x_customer_id, memory=mem.data if mem else {})
 
+    @v1.get("/system-prompt")
+    def v1_get_system_prompt(
+        auth: AuthContext = Depends(require_auth),
+    ) -> dict[str, str]:
+        """Get the system prompt used by the LLM for Google Calendar integration.
+        
+        Returns the complete system prompt from autonomous_system.txt that contains
+        instructions for connecting with Google Calendar using tools like
+        get_available_slots, check_availability, create_booking, etc.
+        
+        Args:
+            auth: Authentication context (injected via dependency)
+            
+        Returns:
+            Dictionary with 'prompt' key containing the system prompt text
+        """
+        _bind_auth_context(auth)
+        _enforce_rate_limit(auth)
+        from ai_assistants.utils.prompts import load_prompt_text
+        try:
+            prompt = load_prompt_text("autonomous_system.txt")
+            return {"prompt": prompt}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error loading system prompt: {str(e)}")
+
+    @v1.post("/automaton-assistant/evaluate", response_model=AutomatonAssistantResponse)
+    def v1_automaton_assistant_evaluate(
+        payload: AutomatonAssistantRequest,
+        auth: AuthContext = Depends(require_auth),
+    ) -> AutomatonAssistantResponse:
+        """Chat endpoint for the automaton evaluation and improvement assistant.
+        
+        This endpoint analyzes existing automata, evaluates their prompts, stages, and tests,
+        and suggests improvements.
+        
+        Args:
+            payload: Request with conversation_id, message, and automaton context
+            auth: Authentication context (injected via dependency)
+            
+        Returns:
+            AutomatonAssistantResponse with assistant's analysis and optionally an improved prompt
+        """
+        _bind_auth_context(auth)
+        _enforce_rate_limit(auth)
+        
+        from ai_assistants.utils.prompts import load_prompt_text
+        from ai_assistants.llm.openai_compatible import OpenAICompatibleConfig, OpenAICompatibleClient
+        from ai_assistants.config.llm_config import load_llm_config
+        import json
+        
+        llm_cfg = load_llm_config()
+        if llm_cfg.base_url is None or llm_cfg.api_key is None or llm_cfg.model is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM service not configured. Set AI_ASSISTANTS_LLM_BASE_URL, AI_ASSISTANTS_LLM_API_KEY, and AI_ASSISTANTS_LLM_MODEL"
+            )
+        
+        try:
+            # Load specialized evaluator prompt
+            system_prompt = load_prompt_text("automaton_evaluator_system.txt")
+            
+            # Build conversation history from store
+            conversation_id = f"automaton-assistant:{payload.conversation_id}"
+            conversation = store.get(conversation_id=conversation_id)
+            
+            # Build user message with full automaton context
+            context_parts = []
+            
+            # Always include automaton context if provided
+            if payload.automaton_context:
+                context_json = json.dumps(payload.automaton_context, indent=2, ensure_ascii=False)
+                context_parts.append(f"CONTEXTO DEL AUTÓMATA:\n{context_json}")
+            
+            # Check if this is an initial message (no conversation history)
+            is_initial_message = payload.message == "__INIT__" or (conversation is None or not conversation.messages)
+            
+            # If there's conversation history and it's not the initial message, include it
+            if not is_initial_message and conversation and conversation.messages:
+                recent_messages = conversation.messages[-6:]  # Last 6 messages for context
+                history_parts = []
+                for msg in recent_messages:
+                    role = "Usuario" if msg.role == "user" else "Asistente"
+                    history_parts.append(f"{role}: {msg.text}")
+                if history_parts:
+                    context_parts.append(f"HISTORIAL DE CONVERSACIÓN:\n" + "\n".join(history_parts))
+            
+            # Build final user message
+            if is_initial_message:
+                # For initial message, just send the context and ask for initial greeting/analysis
+                if context_parts:
+                    user_message = "\n\n".join(context_parts) + "\n\nPor favor, genera un mensaje inicial de bienvenida y análisis del autómata. Debe ser profesional, mostrar que has analizado el contexto proporcionado, y ofrecer opciones de qué puede analizar o mejorar el usuario."
+                else:
+                    user_message = "Por favor, genera un mensaje inicial de bienvenida para el asistente de evaluación de autómatas."
+            else:
+                # For regular messages, include the user's message
+                if context_parts:
+                    user_message = "\n\n".join(context_parts) + f"\n\nMENSAJE DEL USUARIO:\n{payload.message}"
+                else:
+                    user_message = payload.message
+            
+            # Call LLM
+            openai_cfg = OpenAICompatibleConfig(
+                base_url=llm_cfg.base_url,
+                api_key=llm_cfg.api_key,
+                model=llm_cfg.model,
+                timeout_seconds=llm_cfg.timeout_seconds,
+            )
+            client = OpenAICompatibleClient(openai_cfg)
+            assistant_response = client.chat_completion(system=system_prompt, user=user_message)
+            
+            # Save conversation to store
+            from ai_assistants.orchestrator.state import append_message, MessageRole, ConversationState
+            
+            # Get or create conversation state
+            if conversation is None:
+                conversation = ConversationState(conversation_id=conversation_id)
+            
+            # Append user message if not initial
+            if not is_initial_message:
+                conversation = append_message(conversation, role=MessageRole.user, text=payload.message)
+            
+            # Append assistant response
+            conversation = append_message(conversation, role=MessageRole.assistant, text=assistant_response)
+            
+            # Save updated state
+            store.put(conversation)
+            
+            # Check if the response contains a generated prompt
+            # Look for markers like code blocks or "PROMPT GENERADO" patterns
+            prompt_generated = False
+            extracted_prompt = None
+            
+            # Simple heuristic: if response contains structured prompt sections
+            if "You are an assistant that" in assistant_response and "# CONTEXT AND BEHAVIOR" in assistant_response:
+                prompt_generated = True
+                # Extract prompt (everything after a clear marker or the full response if it's a prompt)
+                if "```" in assistant_response:
+                    # Extract from code block
+                    parts = assistant_response.split("```")
+                    if len(parts) >= 3:
+                        extracted_prompt = parts[1].strip()
+                        if extracted_prompt.startswith("prompt") or extracted_prompt.startswith("text"):
+                            extracted_prompt = "\n".join(parts[1].split("\n")[1:]).strip()
+                else:
+                    # Assume the whole response is the prompt if it has the structure
+                    extracted_prompt = assistant_response.strip()
+            
+            return AutomatonAssistantResponse(
+                response=assistant_response,
+                prompt_generated=prompt_generated,
+                prompt=extracted_prompt,
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            from ai_assistants.observability.logging import get_logger
+            error_trace = traceback.format_exc()
+            logger = get_logger()
+            logger.error("automaton_assistant.error", error=str(e), traceback=error_trace)
+            raise HTTPException(status_code=500, detail=f"Error in automaton assistant: {str(e)}")
+
     @v1.delete("/memory", status_code=204)
     def v1_delete_memory(
         auth: AuthContext = Depends(require_auth),
@@ -648,8 +812,13 @@ def create_app() -> FastAPI:
     from ai_assistants.api.customer_calendars import router as customer_calendars_router, set_memory_store
     set_memory_store(memory_store)
     
+    # Importar y configurar router de autómatas
+    from ai_assistants.api.automata import router as automata_router, set_auth_functions
+    set_auth_functions(_bind_auth_context, _enforce_rate_limit)
+    
     app.include_router(v1)
     app.include_router(customer_calendars_router)
+    app.include_router(automata_router)
     if _is_legacy_routes_enabled():
         app.include_router(legacy)
 

@@ -50,6 +50,11 @@ function AddStageModule({ onAddModule, onClose }: AddStageModuleProps) {
       label: 'Confirmación',
       description: 'El asistente pedirá confirmar antes de continuar',
     },
+    {
+      id: 'system_prompt',
+      label: 'Prompt del Sistema LLM',
+      description: 'Prompt completo del LLM que conecta con Google Calendar (solo para flujos de bookings)',
+    },
   ];
 
   return (
